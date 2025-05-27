@@ -1,8 +1,10 @@
+use log::debug;
 use octocrab::{Octocrab, params};
+use pr::Pr;
 use ratatui::{
     Terminal,
     backend::CrosstermBackend,
-    crossterm::event::KeyModifiers,
+    crossterm::event::{KeyEvent, KeyModifiers},
     layout::Constraint,
     style::{Color, Modifier, Style},
     widgets::{Block, Borders, Cell, Row, Table, TableState},
@@ -17,6 +19,8 @@ use ratatui::{
 };
 use std::{error::Error, io};
 use tokio::runtime::Runtime;
+
+mod pr;
 
 const PALETTES: [tailwind::Palette; 4] = [
     tailwind::BLUE,
@@ -57,10 +61,11 @@ impl TableColors {
 
 struct App {
     state: TableState,
-    items: Vec<Vec<String>>,
-    repo: Repo,
+    prs: Vec<Pr>,
+    recent_repos: Vec<Repo>,
+    selected_repo: usize,
     filter: PrFilter,
-    selected_items: Vec<usize>,
+    selected_prs: Vec<usize>,
     colors: TableColors,
 }
 
@@ -89,28 +94,36 @@ impl App {
     fn new() -> App {
         App {
             state: TableState::default(),
-            items: Vec::new(),
-            repo: Repo::new("cargo-generate", "cargo-generate", "main"),
+            prs: Vec::new(),
+            recent_repos: vec![
+                Repo::new("cargo-generate", "cargo-generate", "main"),
+                Repo::new("steganogram", "stegano-rs", "main"),
+            ],
+            selected_repo: 0,
             filter: PrFilter {
                 title: "chore".to_string(),
             },
-            selected_items: Vec::new(),
+            selected_prs: Vec::new(),
             colors: TableColors::new(&PALETTES[0]),
         }
+    }
+
+    fn repo(&self) -> &Repo {
+        &self.recent_repos[self.selected_repo]
     }
 
     fn fetch_data(&mut self) {
         let rt = Runtime::new().unwrap();
         let github_data = rt
-            .block_on(fetch_github_data(&self.repo, &self.filter))
+            .block_on(fetch_github_data(&self.repo(), &self.filter))
             .unwrap();
-        self.items = github_data;
+        self.prs = github_data;
     }
 
     fn next(&mut self) {
         let i = match self.state.selected() {
             Some(i) => {
-                if i >= self.items.len() - 1 {
+                if i >= self.prs.len() - 1 {
                     0
                 } else {
                     i + 1
@@ -125,7 +138,7 @@ impl App {
         let i = match self.state.selected() {
             Some(i) => {
                 if i == 0 {
-                    self.items.len() - 1
+                    self.prs.len() - 1
                 } else {
                     i - 1
                 }
@@ -137,18 +150,40 @@ impl App {
 
     fn select(&mut self) {
         let i = self.state.selected().unwrap_or(0);
-        if self.selected_items.contains(&i) {
-            self.selected_items.retain(|&x| x != i);
+        if self.selected_prs.contains(&i) {
+            self.selected_prs.retain(|&x| x != i);
         } else {
-            self.selected_items.push(i);
+            self.selected_prs.push(i);
         }
+    }
+
+    /// todo: This should be opening a pop-up dialog to let the user type in a org, repo, and branch
+    /// Here is the cheap version that just cycles through the recent repos
+    fn select_next_repo(&mut self) -> io::Result<()> {
+        self.selected_repo = (self.selected_repo + 1) % (self.recent_repos.len() - 1);
+        self.fetch_data();
+        self.state.select(Some(0));
+
+        Ok(())
+    }
+
+    fn exit(&mut self) -> ! {
+        // This is a no-op for now, but could be used to clean up resources or save state
+        debug!("Exiting...");
+        std::process::exit(0);
+    }
+
+    /// Rebase the selected PRs
+    fn rebase(&mut self) -> io::Result<()> {
+        // This is a placeholder for the rebase functionality
+        // In a real application, you would implement the logic to rebase the selected PRs
+        debug!("Rebasing selected PRs: {:?}", self.selected_prs);
+
+        Ok(())
     }
 }
 
-async fn fetch_github_data(
-    repo: &Repo,
-    filter: &PrFilter,
-) -> Result<Vec<Vec<String>>, Box<dyn Error>> {
+async fn fetch_github_data<'a>(repo: &Repo, filter: &PrFilter) -> Result<Vec<Pr>, Box<dyn Error>> {
     let octocrab = Octocrab::builder().build()?;
 
     // Fetch some repos from the Rust organization as an example
@@ -163,7 +198,7 @@ async fn fetch_github_data(
         .send()
         .await?;
 
-    let mut items = Vec::new();
+    let mut prs = Vec::new();
 
     for pr in page.items.into_iter().filter(|pr| {
         pr.title
@@ -171,52 +206,11 @@ async fn fetch_github_data(
             .unwrap_or(&"".to_string())
             .contains(&filter.title)
     }) {
-        let (mergeable_state, merge_commit) = if pr.mergeable_state.is_none() {
-            let pr_no = pr.number;
-            let pr_details = octocrab.pulls(&repo.org, &repo.repo).get(pr_no).await.ok();
-            if let Some(pr_details) = pr_details {
-                let merge_commit = pr_details.merge_commit_sha;
-                (
-                    Some(
-                        pr_details
-                            .mergeable_state
-                            .unwrap_or(octocrab::models::pulls::MergeableState::Unknown),
-                    ),
-                    merge_commit,
-                )
-            } else {
-                (Some(octocrab::models::pulls::MergeableState::Unknown), None)
-            }
-        } else {
-            (Some(octocrab::models::pulls::MergeableState::Unknown), None)
-        };
-
-        let row = vec![
-            pr.number.to_string(),
-            pr.title.unwrap_or_default(),
-            pr.comments.unwrap_or_default().to_string(),
-            pr.mergeable_state
-                .or(mergeable_state)
-                .map(|merge_state| match merge_state {
-                    octocrab::models::pulls::MergeableState::Behind => "n".to_string(),
-                    octocrab::models::pulls::MergeableState::Blocked => "n".to_string(),
-                    octocrab::models::pulls::MergeableState::Clean => match merge_commit {
-                        Some(merge_commit) => format!("y:{merge_commit}"),
-                        None => "y".to_string(),
-                    },
-                    octocrab::models::pulls::MergeableState::Dirty => "n".to_string(),
-                    octocrab::models::pulls::MergeableState::Draft => "n".to_string(),
-                    octocrab::models::pulls::MergeableState::HasHooks => "n".to_string(),
-                    octocrab::models::pulls::MergeableState::Unknown => "na".to_string(),
-                    octocrab::models::pulls::MergeableState::Unstable => "n".to_string(),
-                    _ => todo!(),
-                })
-                .unwrap(),
-        ];
-        items.push(row);
+        let pr = Pr::from_pull_request(&pr, repo, &octocrab).await;
+        prs.push(pr);
     }
 
-    Ok(items)
+    Ok(prs)
 }
 
 fn main() -> Result<(), Box<dyn Error>> {
@@ -235,11 +229,12 @@ fn main() -> Result<(), Box<dyn Error>> {
     // Main loop
     loop {
         terminal.draw(|f| {
+            let selected_repo = app.repo();
             let size = f.area();
             let block = Block::default()
                 .title(format!(
-                    "GitHub PRs: {}/{}@{}",
-                    &app.repo.org, &app.repo.repo, &app.repo.branch
+                    "[/] GitHub PRs: {}/{}@{}",
+                    &selected_repo.org, &selected_repo.repo, &selected_repo.branch
                 ))
                 .borders(Borders::ALL);
 
@@ -247,7 +242,7 @@ fn main() -> Result<(), Box<dyn Error>> {
                 .fg(app.colors.header_fg)
                 .bg(app.colors.header_bg);
 
-            let header_cells = ["#PR", "Description", "#Comments", "Mergable"]
+            let header_cells = ["#PR", "Description", "Author", "#Comments", "Mergable"]
                 .iter()
                 .map(|h| Cell::from(*h).style(header_style));
 
@@ -259,19 +254,18 @@ fn main() -> Result<(), Box<dyn Error>> {
                 .add_modifier(Modifier::REVERSED)
                 .fg(app.colors.selected_row_style_fg);
 
-            let rows = app.items.iter().enumerate().map(|(i, item)| {
+            let rows = app.prs.iter().enumerate().map(|(i, item)| {
                 let color = match i % 2 {
                     0 => app.colors.normal_row_color,
                     _ => app.colors.alt_row_color,
                 };
-                let color = if app.selected_items.contains(&i) {
+                let color = if app.selected_prs.contains(&i) {
                     app.colors.selected_cell_style_fg
                 } else {
                     color
                 };
-                let cells = item.iter().map(|c| Cell::from(c.clone()));
-                Row::new(cells)
-                    .style(Style::new().fg(app.colors.row_fg).bg(color))
+                let row: Row = item.into();
+                row.style(Style::new().fg(app.colors.row_fg).bg(color))
                     .height(1)
             });
 
@@ -290,24 +284,9 @@ fn main() -> Result<(), Box<dyn Error>> {
             f.render_stateful_widget(table, size, &mut app.state);
         })?;
 
-        if let Event::Key(key) = event::read()? {
-            if key.kind == KeyEventKind::Press {
-                let shift_pressed = key.modifiers.contains(KeyModifiers::SHIFT);
-                match key.code {
-                    KeyCode::Char('q') => break,
-                    KeyCode::Char('j') | KeyCode::Down if shift_pressed => {
-                        app.select();
-                        app.next();
-                    }
-                    KeyCode::Char('k') | KeyCode::Up if shift_pressed => {
-                        app.select();
-                        app.previous();
-                    }
-                    KeyCode::Down => app.next(),
-                    KeyCode::Up => app.previous(),
-                    _ => {}
-                }
-            }
+        if let Err(e) = handle_events(&mut app) {
+            debug!("Error handling events: {}", e);
+            break;
         }
     }
 
@@ -321,4 +300,21 @@ fn main() -> Result<(), Box<dyn Error>> {
     terminal.show_cursor()?;
 
     Ok(())
+}
+
+fn handle_events(app: &mut App) -> io::Result<()> {
+    match event::read()? {
+        Event::Key(key) if key.kind == KeyEventKind::Press => handle_key_event(app, key),
+        _ => Ok(()),
+    }
+}
+
+fn handle_key_event(app: &mut App, key: KeyEvent) -> io::Result<()> {
+    // let shift_pressed = key.modifiers.contains(KeyModifiers::SHIFT);
+    match key.code {
+        KeyCode::Char('q') => app.exit(),
+        KeyCode::Char('r') => app.rebase(),
+        KeyCode::Char('/') => app.select_next_repo(),
+        _ => Ok(()),
+    }
 }
