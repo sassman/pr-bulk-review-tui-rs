@@ -1,4 +1,4 @@
-use anyhow::{Result, bail};
+use anyhow::{Context, Result, bail};
 use log::debug;
 use octocrab::{Octocrab, issues::IssueHandler, params};
 use pr::Pr;
@@ -11,6 +11,7 @@ use ratatui::{
     },
     layout::Constraint,
     style::{Color, Modifier, Style},
+    text::Line,
     widgets::{Block, Borders, Cell, Row, Table, TableState},
 };
 use ratatui::{
@@ -21,7 +22,12 @@ use ratatui::{
     },
     style::palette::tailwind,
 };
-use std::{env, io};
+use serde::{Deserialize, Serialize};
+use std::{
+    env,
+    fs::File,
+    io::{self, BufReader},
+};
 use tokio::runtime::Runtime;
 
 mod pr;
@@ -63,6 +69,15 @@ impl TableColors {
     }
 }
 
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+enum LoadingState {
+    #[default]
+    Idle,
+    Loading,
+    Loaded,
+    Error(String),
+}
+
 struct App {
     state: TableState,
     prs: Vec<Pr>,
@@ -71,8 +86,15 @@ struct App {
     filter: PrFilter,
     selected_prs: Vec<usize>,
     colors: TableColors,
+    loading_state: LoadingState,
 }
 
+#[derive(Debug, Serialize, Deserialize, Eq, Clone, PartialEq)]
+struct PersistedState {
+    selected_repo: Repo,
+}
+
+#[derive(Debug, Serialize, Deserialize, Eq, Clone, PartialEq)]
 struct Repo {
     org: String,
     repo: String,
@@ -95,20 +117,18 @@ impl Repo {
 }
 
 impl App {
-    fn new() -> App {
+    fn new(recent_repos: Vec<Repo>) -> App {
         App {
             state: TableState::default(),
             prs: Vec::new(),
-            recent_repos: vec![
-                Repo::new("cargo-generate", "cargo-generate", "main"),
-                Repo::new("steganogram", "stegano-rs", "main"),
-            ],
+            recent_repos,
             selected_repo: 0,
             filter: PrFilter {
                 title: "chore".to_string(),
             },
             selected_prs: Vec::new(),
             colors: TableColors::new(&PALETTES[0]),
+            loading_state: LoadingState::Idle,
         }
     }
 
@@ -124,10 +144,32 @@ impl App {
         &self.recent_repos[self.selected_repo]
     }
 
+    async fn restore_session(&mut self, state: PersistedState) -> Result<()> {
+        // Restore the selected repository from the persisted state
+        if let Some(index) = self
+            .recent_repos
+            .iter()
+            .position(|r| r == &state.selected_repo)
+        {
+            self.selected_repo = index;
+            self.fetch_data().await?;
+            self.state.select(Some(0));
+        } else {
+            bail!("Selected repository not found in recent repositories");
+        }
+
+        Ok(())
+    }
+
     /// Fetch data from GitHub for the selected repository and filter
     async fn fetch_data(&mut self) -> Result<()> {
+        self.loading_state = LoadingState::Loading;
+        // TODO: use tokio::spawn to fetch data in the background
+        // TODO: this requires Arc and RwLock to share state between threads
         let github_data = fetch_github_data(&self.octocrab()?, &self.repo(), &self.filter).await?;
         self.prs = github_data;
+
+        self.loading_state = LoadingState::Loaded;
 
         Ok(())
     }
@@ -175,7 +217,9 @@ impl App {
     /// todo: This should be opening a pop-up dialog to let the user type in a org, repo, and branch
     /// Here is the cheap version that just cycles through the recent repos
     async fn select_next_repo(&mut self) -> Result<()> {
-        self.selected_repo = (self.selected_repo + 1) % (self.recent_repos.len() - 1);
+        let next_repo_index = (self.selected_repo + 1) % self.recent_repos.len();
+
+        self.selected_repo = next_repo_index;
         self.select_repo().await?;
 
         Ok(())
@@ -262,19 +306,30 @@ async fn main() -> Result<()> {
     let mut terminal = Terminal::new(backend)?;
 
     // Create app state
-    let mut app = App::new();
-    app.select_repo().await?;
+    let recent_repos = loading_recent_repos()?;
+    let persisted_state = load_persisted_state();
+    let mut app = App::new(recent_repos);
+
+    if let Ok(state) = persisted_state {
+        app.restore_session(state).await?;
+    } else {
+        app.select_repo().await?;
+    }
 
     // Main loop
     loop {
         terminal.draw(|f| {
             let selected_repo = app.repo();
             let size = f.area();
+
+            let loading_state = Line::from(format!("{:?}", app.loading_state)).right_aligned();
+
             let block = Block::default()
                 .title(format!(
                     "[/] GitHub PRs: {}/{}@{}",
                     &selected_repo.org, &selected_repo.repo, &selected_repo.branch
                 ))
+                .title(loading_state)
                 .borders(Borders::ALL);
 
             let header_style = Style::default()
@@ -329,6 +384,19 @@ async fn main() -> Result<()> {
         }
     }
 
+    // Store recent repositories to a file
+    if let Err(e) = store_recent_repos(&app.recent_repos) {
+        debug!("Error storing recent repositories: {}", e);
+    }
+
+    // Store the current state to a file
+    let state = PersistedState {
+        selected_repo: app.repo().clone(),
+    };
+    if let Err(e) = store_persisted_state(&state) {
+        debug!("Error storing persisted state: {}", e);
+    }
+
     // Restore terminal
     disable_raw_mode()?;
     execute!(
@@ -375,4 +443,55 @@ async fn comment(octocrab: &Octocrab, repo: &Repo, pr: &Pr, body: &str) -> Resul
     issue.create_comment(pr.number as _, body).await?;
 
     Ok(())
+}
+
+/// loading recent repositories from a local config file, that is just json file
+fn loading_recent_repos() -> Result<Vec<Repo>> {
+    let repos = if let Ok(recent_repos) = File::open(".recent-repositories.json") {
+        let reader = BufReader::new(recent_repos);
+        serde_json::from_reader(reader).context("Failed to parse recent repositories from file")?
+    } else {
+        debug!("No recent repositories file found, using default repositories");
+        vec![
+            Repo::new("cargo-generate", "cargo-generate", "main"),
+            Repo::new("steganogram", "stegano-rs", "main"),
+            Repo::new("rust-lang", "rust", "master"),
+        ]
+    };
+
+    debug!("Loaded recent repositories: {:?}", repos);
+
+    Ok(repos)
+}
+
+/// Storing recent repositories to a local json config file
+fn store_recent_repos(repos: &[Repo]) -> Result<()> {
+    let file = File::create(".recent-repositories.json")
+        .context("Failed to create recent repositories file")?;
+    serde_json::to_writer_pretty(file, &repos)
+        .context("Failed to write recent repositories to file")?;
+
+    debug!("Stored recent repositories: {:?}", repos);
+
+    Ok(())
+}
+
+fn store_persisted_state(state: &PersistedState) -> Result<()> {
+    let file = File::create(".session.json").context("Failed to create persisted state file")?;
+    serde_json::to_writer_pretty(file, state).context("Failed to write persisted state to file")?;
+
+    debug!("Stored persisted state: {:?}", state);
+
+    Ok(())
+}
+
+fn load_persisted_state() -> Result<PersistedState> {
+    let file = File::open(".session.json").context("Failed to open persisted state file")?;
+    let reader = BufReader::new(file);
+    let state: PersistedState =
+        serde_json::from_reader(reader).context("Failed to parse persisted state from file")?;
+
+    debug!("Loaded persisted state: {:?}", state);
+
+    Ok(state)
 }

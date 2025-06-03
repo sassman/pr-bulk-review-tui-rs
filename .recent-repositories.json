@@ -1,0 +1,17 @@
+[
+  {
+    "org": "cargo-generate",
+    "repo": "cargo-generate",
+    "branch": "main"
+  },
+  {
+    "org": "steganogram",
+    "repo": "stegano-rs",
+    "branch": "main"
+  },
+  {
+    "org": "signavio",
+    "repo": "pi-eureka",
+    "branch": "main"
+  }
+]
