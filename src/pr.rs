@@ -13,6 +13,7 @@ pub struct Pr {
     pub no_comments: usize,
     pub merge_state: String,
     pub mergeable: MergeableStatus,  // Checked via background task
+    pub needs_rebase: bool,          // True if PR is behind base branch
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -78,6 +79,7 @@ impl Pr {
                 })
                 .unwrap(),
             mergeable: MergeableStatus::Unknown,  // Will be checked in background
+            needs_rebase: false,                  // Will be checked in background
             created_at: pr.created_at.unwrap(),
             updated_at: pr.updated_at.unwrap(),
         }
@@ -111,6 +113,10 @@ impl Into<Row<'static>> for &Pr {
     fn into(self) -> Row<'static> {
         use ratatui::widgets::Cell;
         use ratatui::style::Style;
+        use ratatui::style::Color;
+
+        let rebase_icon = if self.needs_rebase { "↻" } else { "" };
+        let rebase_color = if self.needs_rebase { Color::Yellow } else { Color::DarkGray };
 
         Row::new(vec![
             Cell::from(self.number.to_string()),
@@ -119,6 +125,8 @@ impl Into<Row<'static>> for &Pr {
             Cell::from(self.no_comments.to_string()),
             Cell::from(self.mergeable.icon().to_string())
                 .style(Style::default().fg(self.mergeable.color())),
+            Cell::from(rebase_icon.to_string())
+                .style(Style::default().fg(rebase_color)),
         ])
     }
 }

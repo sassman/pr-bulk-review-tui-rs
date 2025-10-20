@@ -159,12 +159,14 @@ enum Action {
     NavigateToNextPr,
     NavigateToPreviousPr,
     MergeSelectedPrs,
+    OpenCurrentPrInBrowser,
 
     // Background task completion notifications
     BootstrapComplete(Result<BootstrapResult, String>),
     RepoDataLoaded(usize, Result<Vec<Pr>, String>),
     RefreshComplete(Result<Vec<Pr>, String>),
     MergeStatusUpdated(usize, usize, crate::pr::MergeableStatus), // repo_index, pr_number, status
+    RebaseStatusUpdated(usize, usize, bool), // repo_index, pr_number, needs_rebase
     RebaseComplete(Result<(), String>),
     MergeComplete(Result<(), String>),
 
@@ -333,6 +335,22 @@ async fn update(app: &mut App, msg: Action) -> Result<Action> {
             }
         }
 
+        Action::RebaseStatusUpdated(repo_index, pr_number, needs_rebase) => {
+            // Update the rebase status for a specific PR
+            if let Some(data) = app.repo_data.get_mut(&repo_index) {
+                if let Some(pr) = data.prs.iter_mut().find(|pr| pr.number == pr_number) {
+                    pr.needs_rebase = needs_rebase;
+                }
+            }
+
+            // If this is the current repo, update app.prs too
+            if repo_index == app.selected_repo {
+                if let Some(pr) = app.prs.iter_mut().find(|pr| pr.number == pr_number) {
+                    pr.needs_rebase = needs_rebase;
+                }
+            }
+        }
+
         Action::RefreshCurrentRepo => {
             // Trigger background refresh
             if let Some(repo) = app.repo().cloned() {
@@ -350,13 +368,34 @@ async fn update(app: &mut App, msg: Action) -> Result<Action> {
         }
 
         Action::Rebase => {
-            // Trigger background rebase
+            // Auto-select all PRs that need rebase, then trigger background rebase
             if let Some(repo) = app.repo().cloned() {
-                let repo_data = app.get_current_repo_data();
+                let (prs_needing_rebase, prs_clone) = {
+                    let repo_data = app.get_current_repo_data_mut();
+
+                    // Auto-select all PRs that need rebase
+                    let prs_needing_rebase: Vec<usize> = repo_data.prs
+                        .iter()
+                        .enumerate()
+                        .filter(|(_, pr)| pr.needs_rebase)
+                        .map(|(idx, _)| idx)
+                        .collect();
+
+                    if prs_needing_rebase.is_empty() {
+                        debug!("No PRs need rebase");
+                        return Ok(Action::None);
+                    }
+
+                    // Update selection to PRs needing rebase
+                    repo_data.selected_prs = prs_needing_rebase.clone();
+
+                    (prs_needing_rebase, repo_data.prs.clone())
+                };
+
                 let _ = app.task_tx.send(BackgroundTask::Rebase {
                     repo,
-                    prs: repo_data.prs.clone(),
-                    selected_indices: repo_data.selected_prs.clone(),
+                    prs: prs_clone,
+                    selected_indices: prs_needing_rebase,
                     octocrab: app.octocrab()?,
                 });
             }
@@ -392,6 +431,38 @@ async fn update(app: &mut App, msg: Action) -> Result<Action> {
                     data.selected_prs.clear();
                 }
                 Err(err) => debug!("Merge failed: {}", err),
+            }
+        }
+
+        Action::OpenCurrentPrInBrowser => {
+            if let Some(repo) = app.repo() {
+                let repo_data = app.get_current_repo_data();
+
+                // If multiple PRs are selected, open all of them
+                if !repo_data.selected_prs.is_empty() {
+                    for &idx in &repo_data.selected_prs {
+                        if let Some(pr) = repo_data.prs.get(idx) {
+                            let url = format!("https://github.com/{}/{}/pull/{}", repo.org, repo.repo, pr.number);
+                            #[cfg(target_os = "macos")]
+                            let _ = std::process::Command::new("open").arg(&url).spawn();
+                            #[cfg(target_os = "linux")]
+                            let _ = std::process::Command::new("xdg-open").arg(&url).spawn();
+                            #[cfg(target_os = "windows")]
+                            let _ = std::process::Command::new("cmd").args(&["/C", "start", &url]).spawn();
+                        }
+                    }
+                } else if let Some(selected_idx) = repo_data.table_state.selected() {
+                    // If no multi-selection, open the currently focused PR
+                    if let Some(pr) = repo_data.prs.get(selected_idx) {
+                        let url = format!("https://github.com/{}/{}/pull/{}", repo.org, repo.repo, pr.number);
+                        #[cfg(target_os = "macos")]
+                        let _ = std::process::Command::new("open").arg(&url).spawn();
+                        #[cfg(target_os = "linux")]
+                        let _ = std::process::Command::new("xdg-open").arg(&url).spawn();
+                        #[cfg(target_os = "windows")]
+                        let _ = std::process::Command::new("cmd").args(&["/C", "start", &url]).spawn();
+                    }
+                }
             }
         }
 
@@ -486,14 +557,14 @@ fn start_task_worker(
                         let task = tokio::spawn(async move {
                             use crate::pr::MergeableStatus;
 
-                            // Fetch detailed PR info to get mergeable status
+                            // Fetch detailed PR info to get mergeable status and rebase status
                             match octocrab.pulls(&repo.org, &repo.repo).get(pr_number as u64).await {
                                 Ok(pr_detail) => {
                                     let status = match pr_detail.mergeable {
                                         Some(true) => MergeableStatus::Mergeable,
                                         Some(false) => {
                                             // Check if it's due to conflicts or blocks
-                                            if let Some(state) = pr_detail.mergeable_state {
+                                            if let Some(ref state) = pr_detail.mergeable_state {
                                                 match state {
                                                     octocrab::models::pulls::MergeableState::Dirty => MergeableStatus::Conflicted,
                                                     octocrab::models::pulls::MergeableState::Blocked => MergeableStatus::Blocked,
@@ -506,7 +577,15 @@ fn start_task_worker(
                                         None => MergeableStatus::Unknown,
                                     };
 
+                                    // Check if PR needs rebase (Behind state means PR is behind base branch)
+                                    let needs_rebase = if let Some(ref state) = pr_detail.mergeable_state {
+                                        matches!(state, octocrab::models::pulls::MergeableState::Behind)
+                                    } else {
+                                        false
+                                    };
+
                                     let _ = action_tx.send(Action::MergeStatusUpdated(repo_index, pr_number, status));
+                                    let _ = action_tx.send(Action::RebaseStatusUpdated(repo_index, pr_number, needs_rebase));
                                 }
                                 Err(_) => {
                                     // Failed to fetch, keep as unknown
@@ -525,8 +604,20 @@ fn start_task_worker(
                     let mut success = true;
                     for &idx in &selected_indices {
                         if let Some(pr) = prs.get(idx) {
-                            if pr.author.starts_with("dependabot") {
-                                if let Err(_) = comment(&octocrab, &repo, pr, "@dependabot rebase").await {
+                            // Try to update the branch (GitHub API endpoint for "Update branch")
+                            // This performs a rebase/merge to bring the PR branch up to date with base
+                            let update_result = octocrab
+                                .pulls(&repo.org, &repo.repo)
+                                .update_branch(pr.number as u64)
+                                .await;
+
+                            if update_result.is_err() {
+                                // Fallback: For dependabot PRs, use @dependabot rebase comment
+                                if pr.author.starts_with("dependabot") {
+                                    if let Err(_) = comment(&octocrab, &repo, pr, "@dependabot rebase").await {
+                                        success = false;
+                                    }
+                                } else {
                                     success = false;
                                 }
                             }
@@ -712,7 +803,7 @@ fn ui(f: &mut Frame, app: &mut App) {
         .fg(app.colors.header_fg)
         .bg(app.colors.header_bg);
 
-    let header_cells = ["#PR", "Description", "Author", "#Comments", "Status"]
+    let header_cells = ["#PR", "Description", "Author", "#Comments", "Status", "Rebase"]
         .iter()
         .map(|h| Cell::from(*h).style(header_style));
 
@@ -756,10 +847,11 @@ fn ui(f: &mut Frame, app: &mut App) {
 
         let widths = [
             Constraint::Percentage(8),   // #PR
-            Constraint::Percentage(62),  // Description
+            Constraint::Percentage(57),  // Description
             Constraint::Percentage(15),  // Author
             Constraint::Percentage(10),  // #Comments
             Constraint::Percentage(5),   // Status
+            Constraint::Percentage(5),   // Rebase
         ];
 
         let table = Table::new(rows, widths)
@@ -815,6 +907,33 @@ fn render_action_panel(f: &mut Frame, app: &App, area: Rect) {
             "Select".to_string(),
             tailwind::AMBER.c600,
         ));
+    }
+
+    // Check if there are PRs that need rebase
+    let prs_needing_rebase = repo_data.prs.iter().filter(|pr| pr.needs_rebase).count();
+    if prs_needing_rebase > 0 {
+        context_actions.push((
+            "r".to_string(),
+            format!("Auto-rebase ({})", prs_needing_rebase),
+            tailwind::YELLOW.c600,
+        ));
+    }
+
+    // Add Enter action when PR(s) are selected or focused
+    if !repo_data.prs.is_empty() {
+        if selected_count > 0 {
+            context_actions.push((
+                "Enter".to_string(),
+                format!("Open in Browser ({})", selected_count),
+                tailwind::PURPLE.c600,
+            ));
+        } else if repo_data.table_state.selected().is_some() {
+            context_actions.push((
+                "Enter".to_string(),
+                "Open in Browser".to_string(),
+                tailwind::PURPLE.c600,
+            ));
+        }
     }
 
     // Global actions (always available, less emphasized)
@@ -1277,6 +1396,7 @@ fn handle_key_event(key: KeyEvent) -> Action {
         KeyCode::Char('k') | KeyCode::Up => Action::NavigateToPreviousPr,
         KeyCode::Char(' ') => Action::TogglePrSelection,
         KeyCode::Char('m') => Action::MergeSelectedPrs,
+        KeyCode::Enter => Action::OpenCurrentPrInBrowser,
         // Number keys 1-9 for direct tab selection
         KeyCode::Char('1') => Action::SelectRepoByIndex(0),
         KeyCode::Char('2') => Action::SelectRepoByIndex(1),
