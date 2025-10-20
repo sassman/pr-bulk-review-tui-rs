@@ -597,9 +597,10 @@ impl App {
 
     /// Move to the next PR in the list
     fn next(&mut self) {
-        let i = match self.state.selected() {
+        let repo_data = self.get_current_repo_data();
+        let i = match repo_data.table_state.selected() {
             Some(i) => {
-                if i < self.prs.len() - 1 {
+                if i < repo_data.prs.len() - 1 {
                     i + 1
                 } else {
                     i
@@ -607,12 +608,17 @@ impl App {
             }
             None => 0,
         };
+
+        // Update both the repo data state and the app state
         self.state.select(Some(i));
+        let data = self.repo_data.entry(self.selected_repo).or_default();
+        data.table_state.select(Some(i));
     }
 
     /// Move to the previous PR in the list
     fn previous(&mut self) {
-        let i = match self.state.selected() {
+        let repo_data = self.get_current_repo_data();
+        let i = match repo_data.table_state.selected() {
             Some(i) => {
                 if i > 0 {
                     i - 1
@@ -622,16 +628,30 @@ impl App {
             }
             None => 0,
         };
+
+        // Update both the repo data state and the app state
         self.state.select(Some(i));
+        let data = self.repo_data.entry(self.selected_repo).or_default();
+        data.table_state.select(Some(i));
     }
 
     /// Toggle the selection of the currently selected PR
     fn select_toggle(&mut self) {
-        let i = self.state.selected().unwrap_or(0);
+        let repo_data = self.get_current_repo_data();
+        let i = repo_data.table_state.selected().unwrap_or(0);
+
+        // Update both the app state and repo data
         if self.selected_prs.contains(&i) {
             self.selected_prs.retain(|&x| x != i);
         } else {
             self.selected_prs.push(i);
+        }
+
+        let data = self.repo_data.entry(self.selected_repo).or_default();
+        if data.selected_prs.contains(&i) {
+            data.selected_prs.retain(|&x| x != i);
+        } else {
+            data.selected_prs.push(i);
         }
     }
 
