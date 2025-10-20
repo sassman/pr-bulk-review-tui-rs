@@ -12,8 +12,18 @@ pub struct Pr {
     pub author: String,
     pub no_comments: usize,
     pub merge_state: String,
+    pub mergeable: MergeableStatus,  // Checked via background task
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum MergeableStatus {
+    Unknown,      // Not yet checked
+    Checking,     // Background check in progress
+    Mergeable,    // ✓ Can be merged
+    Conflicted,   // ✗ Has conflicts
+    Blocked,      // ✗ Blocked by checks/reviews
 }
 
 impl Pr {
@@ -67,21 +77,48 @@ impl Pr {
                     _ => todo!(),
                 })
                 .unwrap(),
+            mergeable: MergeableStatus::Unknown,  // Will be checked in background
             created_at: pr.created_at.unwrap(),
             updated_at: pr.updated_at.unwrap(),
         }
     }
 }
 
-impl<'a> Into<Row<'a>> for &Pr {
-    fn into(self) -> Row<'a> {
+impl MergeableStatus {
+    pub fn icon(&self) -> &str {
+        match self {
+            MergeableStatus::Unknown => "?",
+            MergeableStatus::Checking => "⋯",
+            MergeableStatus::Mergeable => "✓",
+            MergeableStatus::Conflicted => "✗",
+            MergeableStatus::Blocked => "⊗",
+        }
+    }
+
+    pub fn color(&self) -> ratatui::style::Color {
+        use ratatui::style::Color;
+        match self {
+            MergeableStatus::Unknown => Color::DarkGray,
+            MergeableStatus::Checking => Color::Yellow,
+            MergeableStatus::Mergeable => Color::Green,
+            MergeableStatus::Conflicted => Color::Red,
+            MergeableStatus::Blocked => Color::Red,
+        }
+    }
+}
+
+impl Into<Row<'static>> for &Pr {
+    fn into(self) -> Row<'static> {
+        use ratatui::widgets::Cell;
+        use ratatui::style::Style;
+
         Row::new(vec![
-            self.number.to_string(),
-            self.title.clone(),
-            self.author.clone(),
-            self.no_comments.to_string(),
-            self.created_at.to_rfc3339(),
-            self.updated_at.to_rfc3339(),
+            Cell::from(self.number.to_string()),
+            Cell::from(self.title.clone()),
+            Cell::from(self.author.clone()),
+            Cell::from(self.no_comments.to_string()),
+            Cell::from(self.mergeable.icon().to_string())
+                .style(Style::default().fg(self.mergeable.color())),
         ])
     }
 }

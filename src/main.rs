@@ -164,6 +164,7 @@ enum Action {
     BootstrapComplete(Result<BootstrapResult, String>),
     RepoDataLoaded(usize, Result<Vec<Pr>, String>),
     RefreshComplete(Result<Vec<Pr>, String>),
+    MergeStatusUpdated(usize, usize, crate::pr::MergeableStatus), // repo_index, pr_number, status
     RebaseComplete(Result<(), String>),
     MergeComplete(Result<(), String>),
 
@@ -188,6 +189,12 @@ enum BackgroundTask {
         repo_index: usize,
         repo: Repo,
         filter: PrFilter,
+        octocrab: Octocrab,
+    },
+    CheckMergeStatus {
+        repo_index: usize,
+        repo: Repo,
+        pr_numbers: Vec<usize>,
         octocrab: Octocrab,
     },
     Rebase {
@@ -269,10 +276,24 @@ async fn update(app: &mut App, msg: Action) -> Result<Action> {
             let data = app.repo_data.entry(index).or_default();
             match result {
                 Ok(prs) => {
-                    data.prs = prs;
+                    data.prs = prs.clone();
                     data.loading_state = LoadingState::Loaded;
                     if data.table_state.selected().is_none() && !data.prs.is_empty() {
                         data.table_state.select(Some(0));
+                    }
+
+                    // Trigger background merge status checks for this repo
+                    if let Some(repo) = app.recent_repos.get(index).cloned() {
+                        let pr_numbers: Vec<usize> = prs.iter().map(|pr| pr.number).collect();
+                        let _ = app.task_tx.send(BackgroundTask::CheckMergeStatus {
+                            repo_index: index,
+                            repo,
+                            pr_numbers,
+                            octocrab: app.octocrab().unwrap_or_else(|_| {
+                                // Fallback - shouldn't happen
+                                Octocrab::default()
+                            }),
+                        });
                     }
                 }
                 Err(err) => {
@@ -293,6 +314,22 @@ async fn update(app: &mut App, msg: Action) -> Result<Action> {
 
             if all_loaded && app.bootstrap_state == BootstrapState::LoadingPRs {
                 app.bootstrap_state = BootstrapState::Completed;
+            }
+        }
+
+        Action::MergeStatusUpdated(repo_index, pr_number, status) => {
+            // Update the merge status for a specific PR
+            if let Some(data) = app.repo_data.get_mut(&repo_index) {
+                if let Some(pr) = data.prs.iter_mut().find(|pr| pr.number == pr_number) {
+                    pr.mergeable = status;
+                }
+            }
+
+            // If this is the current repo, update app.prs too
+            if repo_index == app.selected_repo {
+                if let Some(pr) = app.prs.iter_mut().find(|pr| pr.number == pr_number) {
+                    pr.mergeable = status;
+                }
             }
         }
 
@@ -437,6 +474,52 @@ fn start_task_worker(
                     let result = fetch_github_data(&octocrab, &repo, &filter).await
                         .map_err(|e| e.to_string());
                     let _ = action_tx.send(Action::RepoDataLoaded(repo_index, result));
+                }
+                BackgroundTask::CheckMergeStatus { repo_index, repo, pr_numbers, octocrab } => {
+                    // Check merge status for each PR in parallel
+                    let mut tasks = Vec::new();
+                    for pr_number in pr_numbers {
+                        let octocrab = octocrab.clone();
+                        let repo = repo.clone();
+                        let action_tx = action_tx.clone();
+
+                        let task = tokio::spawn(async move {
+                            use crate::pr::MergeableStatus;
+
+                            // Fetch detailed PR info to get mergeable status
+                            match octocrab.pulls(&repo.org, &repo.repo).get(pr_number as u64).await {
+                                Ok(pr_detail) => {
+                                    let status = match pr_detail.mergeable {
+                                        Some(true) => MergeableStatus::Mergeable,
+                                        Some(false) => {
+                                            // Check if it's due to conflicts or blocks
+                                            if let Some(state) = pr_detail.mergeable_state {
+                                                match state {
+                                                    octocrab::models::pulls::MergeableState::Dirty => MergeableStatus::Conflicted,
+                                                    octocrab::models::pulls::MergeableState::Blocked => MergeableStatus::Blocked,
+                                                    _ => MergeableStatus::Blocked,
+                                                }
+                                            } else {
+                                                MergeableStatus::Conflicted
+                                            }
+                                        }
+                                        None => MergeableStatus::Unknown,
+                                    };
+
+                                    let _ = action_tx.send(Action::MergeStatusUpdated(repo_index, pr_number, status));
+                                }
+                                Err(_) => {
+                                    // Failed to fetch, keep as unknown
+                                }
+                            }
+                        });
+                        tasks.push(task);
+                    }
+
+                    // Wait for all checks to complete
+                    for task in tasks {
+                        let _ = task.await;
+                    }
                 }
                 BackgroundTask::Rebase { repo, prs, selected_indices, octocrab } => {
                     let mut success = true;
@@ -629,7 +712,7 @@ fn ui(f: &mut Frame, app: &mut App) {
         .fg(app.colors.header_fg)
         .bg(app.colors.header_bg);
 
-    let header_cells = ["#PR", "Description", "Author", "#Comments", "Mergable"]
+    let header_cells = ["#PR", "Description", "Author", "#Comments", "Status"]
         .iter()
         .map(|h| Cell::from(*h).style(header_style));
 
@@ -672,10 +755,11 @@ fn ui(f: &mut Frame, app: &mut App) {
         });
 
         let widths = [
-            Constraint::Percentage(10),
-            Constraint::Percentage(70),
-            Constraint::Percentage(10),
-            Constraint::Percentage(10),
+            Constraint::Percentage(8),   // #PR
+            Constraint::Percentage(62),  // Description
+            Constraint::Percentage(15),  // Author
+            Constraint::Percentage(10),  // #Comments
+            Constraint::Percentage(5),   // Status
         ];
 
         let table = Table::new(rows, widths)
