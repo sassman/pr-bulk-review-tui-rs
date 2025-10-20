@@ -1107,7 +1107,7 @@ impl App {
             recent_repos: Vec::new(),
             selected_repo: 0,
             filter: PrFilter {
-                title: "chore".to_string(),
+                title: "".to_string(),  // Empty filter = show all PRs
             },
             selected_prs: Vec::new(),
             colors: TableColors::new(&PALETTES[0]),
