@@ -130,8 +130,40 @@ struct Repo {
 }
 
 #[derive(Debug, Serialize, Deserialize, Eq, Clone, PartialEq)]
-struct PrFilter {
-    title: String,
+enum PrFilter {
+    None,      // Show all PRs
+    Feat,      // Show only "feat:" PRs
+    Fix,       // Show only "fix:" PRs
+    Chore,     // Show only "chore:" PRs
+}
+
+impl PrFilter {
+    fn matches(&self, title: &str) -> bool {
+        match self {
+            PrFilter::None => true,
+            PrFilter::Feat => title.to_lowercase().contains("feat"),
+            PrFilter::Fix => title.to_lowercase().contains("fix"),
+            PrFilter::Chore => title.to_lowercase().contains("chore"),
+        }
+    }
+
+    fn label(&self) -> &str {
+        match self {
+            PrFilter::None => "All",
+            PrFilter::Feat => "Feat",
+            PrFilter::Fix => "Fix",
+            PrFilter::Chore => "Chore",
+        }
+    }
+
+    fn next(&self) -> Self {
+        match self {
+            PrFilter::None => PrFilter::Feat,
+            PrFilter::Feat => PrFilter::Fix,
+            PrFilter::Fix => PrFilter::Chore,
+            PrFilter::Chore => PrFilter::None,
+        }
+    }
 }
 
 impl Repo {
@@ -167,6 +199,7 @@ enum Action {
     Bootstrap,
     Rebase,
     RefreshCurrentRepo,
+    CycleFilter,
     SelectNextRepo,
     SelectPreviousRepo,
     SelectRepoByIndex(usize),
@@ -388,6 +421,29 @@ async fn update(app: &mut App, msg: Action) -> Result<Action> {
                     message: format!("Refreshing {}/{}...", repo.org, repo.repo),
                     status_type: TaskStatusType::Running,
                 });
+
+                let _ = app.task_tx.send(BackgroundTask::LoadSingleRepo {
+                    repo_index: app.selected_repo,
+                    repo,
+                    filter: app.filter.clone(),
+                    octocrab: app.octocrab()?,
+                });
+            }
+        }
+
+        Action::CycleFilter => {
+            // Cycle to next filter and reload current repo
+            app.filter = app.filter.next();
+
+            app.task_status = Some(TaskStatus {
+                message: format!("Filtering by: {}", app.filter.label()),
+                status_type: TaskStatusType::Running,
+            });
+
+            if let Some(repo) = app.repo().cloned() {
+                app.loading_state = LoadingState::Loading;
+                let data = app.repo_data.entry(app.selected_repo).or_default();
+                data.loading_state = LoadingState::Loading;
 
                 let _ = app.task_tx.send(BackgroundTask::LoadSingleRepo {
                     repo_index: app.selected_repo,
@@ -825,7 +881,9 @@ fn ui(f: &mut Frame, app: &mut App) {
         .collect();
 
     let tabs = Tabs::new(tab_titles)
-        .block(Block::default().borders(Borders::ALL).title("Projects [Tab/Shift+Tab or 1-9 to switch, / to cycle]"))
+        .block(Block::default()
+            .borders(Borders::ALL)
+            .title(format!("Projects [Tab/1-9: switch, /: cycle] | Filter: {} [f: cycle]", app.filter.label())))
         .select(app.selected_repo)
         .style(Style::default().fg(app.colors.row_fg))
         .highlight_style(
@@ -1008,6 +1066,7 @@ fn render_action_panel(f: &mut Frame, app: &App, area: Rect) {
 
     // Global actions (always available, less emphasized)
     global_actions.push(("↑↓/jk".to_string(), "Navigate".to_string(), app.colors.header_bg));
+    global_actions.push(("f".to_string(), format!("Filter: {}", app.filter.label()), app.colors.header_bg));
     global_actions.push(("Tab".to_string(), "Switch Project".to_string(), app.colors.header_bg));
     global_actions.push(("Ctrl+r".to_string(), "Refresh".to_string(), app.colors.header_bg));
     global_actions.push(("q".to_string(), "Quit".to_string(), app.colors.header_bg));
@@ -1106,9 +1165,7 @@ impl App {
             prs: Vec::new(),
             recent_repos: Vec::new(),
             selected_repo: 0,
-            filter: PrFilter {
-                title: "".to_string(),  // Empty filter = show all PRs
-            },
+            filter: PrFilter::None,
             selected_prs: Vec::new(),
             colors: TableColors::new(&PALETTES[0]),
             loading_state: LoadingState::Idle,
@@ -1461,10 +1518,7 @@ async fn fetch_github_data<'a>(
         let page_is_empty = page.items.is_empty();
 
         for pr in page.items.into_iter().filter(|pr| {
-            pr.title
-                .as_ref()
-                .unwrap_or(&"".to_string())
-                .contains(&filter.title)
+            pr.title.as_ref().map(|t| filter.matches(t)).unwrap_or(false)
         }) {
             if prs.len() >= MAX_PRS {
                 break;
@@ -1498,6 +1552,7 @@ fn handle_key_event(key: KeyEvent) -> Action {
 
     match key.code {
         KeyCode::Char('q') => Action::Quit,
+        KeyCode::Char('f') => Action::CycleFilter,
         KeyCode::Char('r') if ctrl_pressed => Action::RefreshCurrentRepo,
         KeyCode::Char('r') => Action::Rebase,
         KeyCode::Char('/') => Action::SelectNextRepo,
