@@ -206,7 +206,7 @@ pub fn extract_error_context(log_text: &str, _step_name: &str) -> Vec<String> {
 
 /// Render the log panel as a card overlay with PR context header
 /// Takes the available area (excluding top tabs and bottom panels)
-pub fn render_log_panel_card(f: &mut Frame, panel: &LogPanel, colors: &crate::TableColors, available_area: Rect) {
+pub fn render_log_panel_card(f: &mut Frame, panel: &LogPanel, colors: &crate::state::TableColors, available_area: Rect) {
     // Use Clear widget to completely clear the underlying content
     f.render_widget(Clear, available_area);
 

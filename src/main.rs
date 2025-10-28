@@ -22,6 +22,8 @@ use crate::gh::{comment, merge};
 use crate::log::{LogPanel, LogSection, PrContext};
 use crate::pr::Pr;
 use crate::shortcuts::Action;
+use crate::state::*;
+use crate::store::Store;
 use crate::theme::Theme;
 
 mod config;
@@ -29,7 +31,10 @@ mod gh;
 mod log;
 mod merge_bot;
 mod pr;
+mod reducer;
 mod shortcuts;
+mod state;
+mod store;
 mod theme;
 
 const PALETTES: [tailwind::Palette; 4] = [
@@ -39,167 +44,22 @@ const PALETTES: [tailwind::Palette; 4] = [
     tailwind::RED,
 ];
 
-struct TableColors {
-    buffer_bg: Color,
-    header_bg: Color,
-    header_fg: Color,
-    row_fg: Color,
-    selected_row_style_fg: Color,
-    selected_column_style_fg: Color,
-    selected_cell_style_fg: Color,
-    normal_row_color: Color,
-    alt_row_color: Color,
-    footer_border_color: Color,
-}
+// TableColors moved to state.rs
 
-impl TableColors {
-    const fn new(color: &tailwind::Palette) -> Self {
-        Self {
-            buffer_bg: tailwind::SLATE.c950,
-            header_bg: color.c900,
-            header_fg: tailwind::SLATE.c200,
-            row_fg: tailwind::SLATE.c200,
-            selected_row_style_fg: color.c400,
-            selected_column_style_fg: color.c400,
-            selected_cell_style_fg: color.c600,
-            normal_row_color: tailwind::SLATE.c950,
-            alt_row_color: tailwind::SLATE.c900,
-            footer_border_color: color.c400,
-        }
-    }
-}
-
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
-enum LoadingState {
-    #[default]
-    Idle,
-    Loading,
-    Loaded,
-    Error(String),
-}
-
-#[derive(Debug, Clone, Default, PartialEq, Eq)]
-enum BootstrapState {
-    #[default]
-    NotStarted,
-    LoadingRepositories,
-    RestoringSession,
-    LoadingPRs,
-    Completed,
-    Error(String),
-}
+// Types moved to state.rs - keeping only App and PersistedState here
+// Note: TableColors is now defined in state.rs
 
 struct App {
+    // Redux store - centralized state management
+    store: Store,
+    // Communication channels
     action_tx: mpsc::UnboundedSender<Action>,
     task_tx: mpsc::UnboundedSender<BackgroundTask>,
-    should_quit: bool,
-    state: TableState,
-    prs: Vec<Pr>,
-    recent_repos: Vec<Repo>,
-    selected_repo: usize,
-    filter: PrFilter,
-    selected_prs: Vec<usize>,
-    colors: TableColors,
-    loading_state: LoadingState,
-    bootstrap_state: BootstrapState,
-    // Tabbed view: store PRs and state for each repo
-    repo_data: std::collections::HashMap<usize, RepoData>,
-    // Background task status
-    task_status: Option<TaskStatus>,
-    // Log viewer panel
-    log_panel: Option<LogPanel>,
-    // Spinner animation frame counter
-    spinner_frame: usize,
-    // User configuration
-    config: Config,
-    // Shortcuts panel visibility and scroll state
-    show_shortcuts: bool,
-    shortcuts_scroll: usize,
-    shortcuts_max_scroll: usize,
-    // Application theme
-    theme: Theme,
-    // Merge bot
-    merge_bot: crate::merge_bot::MergeBot,
-}
-
-#[derive(Debug, Clone)]
-struct TaskStatus {
-    message: String,
-    status_type: TaskStatusType,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-enum TaskStatusType {
-    Running, // ⏳ In progress
-    Success, // ✓ Completed successfully
-    Error,   // ✗ Failed
-}
-
-#[derive(Debug, Clone, Default)]
-struct RepoData {
-    prs: Vec<Pr>,
-    table_state: TableState,
-    selected_prs: Vec<usize>,
-    loading_state: LoadingState,
 }
 
 #[derive(Debug, Serialize, Deserialize, Eq, Clone, PartialEq)]
 struct PersistedState {
     selected_repo: Repo,
-}
-
-#[derive(Debug, Serialize, Deserialize, Eq, Clone, PartialEq)]
-struct Repo {
-    org: String,
-    repo: String,
-    branch: String,
-}
-
-#[derive(Debug, Serialize, Deserialize, Eq, Clone, PartialEq)]
-enum PrFilter {
-    None,  // Show all PRs
-    Feat,  // Show only "feat:" PRs
-    Fix,   // Show only "fix:" PRs
-    Chore, // Show only "chore:" PRs
-}
-
-impl PrFilter {
-    fn matches(&self, title: &str) -> bool {
-        match self {
-            PrFilter::None => true,
-            PrFilter::Feat => title.to_lowercase().contains("feat"),
-            PrFilter::Fix => title.to_lowercase().contains("fix"),
-            PrFilter::Chore => title.to_lowercase().contains("chore"),
-        }
-    }
-
-    fn label(&self) -> &str {
-        match self {
-            PrFilter::None => "All",
-            PrFilter::Feat => "Feat",
-            PrFilter::Fix => "Fix",
-            PrFilter::Chore => "Chore",
-        }
-    }
-
-    fn next(&self) -> Self {
-        match self {
-            PrFilter::None => PrFilter::Feat,
-            PrFilter::Feat => PrFilter::Fix,
-            PrFilter::Fix => PrFilter::Chore,
-            PrFilter::Chore => PrFilter::None,
-        }
-    }
-}
-
-impl Repo {
-    fn new(org: &str, repo: &str, branch: &str) -> Repo {
-        Repo {
-            org: org.to_string(),
-            repo: repo.to_string(),
-            branch: branch.to_string(),
-        }
-    }
 }
 
 pub fn initialize_panic_handler() {
@@ -278,7 +138,7 @@ enum BackgroundTask {
 
 async fn update(app: &mut App, msg: Action) -> Result<Action> {
     // When shortcuts panel is open, remap navigation to shortcuts scrolling
-    let msg = if app.show_shortcuts {
+    let msg = if app.store.state().ui.show_shortcuts {
         match msg {
             Action::NavigateToNextPr => Action::ScrollShortcutsDown,
             Action::NavigateToPreviousPr => Action::ScrollShortcutsUp,
@@ -293,32 +153,35 @@ async fn update(app: &mut App, msg: Action) -> Result<Action> {
     };
 
     match msg {
-        Action::Quit => app.should_quit = true,
+        Action::Quit => {
+            // Use Redux dispatch for simple state updates
+            app.store.dispatch(Action::Quit);
+        }
 
         Action::Bootstrap => {
             // Stage 1: Loading repositories (fast, synchronous)
-            app.bootstrap_state = BootstrapState::LoadingRepositories;
+            app.store.state_mut().repos.bootstrap_state = BootstrapState::LoadingRepositories;
 
             match loading_recent_repos() {
                 Ok(repos) => {
-                    app.recent_repos = repos;
+                    app.store.state_mut().repos.recent_repos = repos;
 
-                    if app.recent_repos.is_empty() {
-                        app.bootstrap_state = BootstrapState::Error(
+                    if app.store.state().repos.recent_repos.is_empty() {
+                        app.store.state_mut().repos.bootstrap_state = BootstrapState::Error(
                             "No repositories configured. Add repositories to .recent-repositories.json".to_string()
                         );
                         return Ok(Action::None);
                     }
                 }
                 Err(err) => {
-                    app.bootstrap_state =
+                    app.store.state_mut().repos.bootstrap_state =
                         BootstrapState::Error(format!("Failed to load repositories: {}", err));
                     return Ok(Action::None);
                 }
             }
 
             // Stage 2: Restoring session (fast, synchronous)
-            app.bootstrap_state = BootstrapState::RestoringSession;
+            app.store.state_mut().repos.bootstrap_state = BootstrapState::RestoringSession;
 
             let restored = if let Ok(state) = load_persisted_state() {
                 if let Err(err) = app.restore_session(state).await {
@@ -332,38 +195,38 @@ async fn update(app: &mut App, msg: Action) -> Result<Action> {
             };
 
             if !restored {
-                app.selected_repo = 0;
+                app.store.state_mut().repos.selected_repo = 0;
             }
 
             // Stage 3: Loading PRs (slow, move to background)
-            app.bootstrap_state = BootstrapState::LoadingPRs;
+            app.store.state_mut().repos.bootstrap_state = BootstrapState::LoadingPRs;
 
             // Set status
-            app.task_status = Some(TaskStatus {
+            app.store.state_mut().task.status = Some(TaskStatus {
                 message: format!(
                     "Loading PRs from {} repositories...",
-                    app.recent_repos.len()
+                    app.store.state().repos.recent_repos.len()
                 ),
                 status_type: TaskStatusType::Running,
             });
 
             // Set all repos to loading state
-            for i in 0..app.recent_repos.len() {
-                let data = app.repo_data.entry(i).or_default();
+            for i in 0..app.store.state().repos.recent_repos.len() {
+                let data = app.store.state_mut().repos.repo_data.entry(i).or_default();
                 data.loading_state = LoadingState::Loading;
             }
 
             // Trigger background loading
             let _ = app.task_tx.send(BackgroundTask::LoadAllRepos {
-                repos: app.recent_repos.clone(),
-                filter: app.filter.clone(),
+                repos: app.store.state().repos.recent_repos.clone(),
+                filter: app.store.state().repos.filter.clone(),
                 octocrab: app.octocrab()?,
             });
         }
 
         Action::RepoDataLoaded(index, result) => {
             // Handle completion of background repo loading
-            let data = app.repo_data.entry(index).or_default();
+            let data = app.store.state_mut().repos.repo_data.entry(index).or_default();
             match result {
                 Ok(prs) => {
                     data.prs = prs.clone();
@@ -373,7 +236,7 @@ async fn update(app: &mut App, msg: Action) -> Result<Action> {
                     }
 
                     // Trigger background merge status checks for this repo
-                    if let Some(repo) = app.recent_repos.get(index).cloned() {
+                    if let Some(repo) = app.store.state().repos.recent_repos.get(index).cloned() {
                         let pr_numbers: Vec<usize> = prs.iter().map(|pr| pr.number).collect();
                         let _ = app.task_tx.send(BackgroundTask::CheckMergeStatus {
                             repo_index: index,
@@ -392,23 +255,23 @@ async fn update(app: &mut App, msg: Action) -> Result<Action> {
             }
 
             // Load current repo state if this is the selected repo
-            if index == app.selected_repo {
+            if index == app.store.state().repos.selected_repo {
                 app.load_repo_state();
             }
 
             // Check if all repos are done loading
-            let all_loaded = app.repo_data.len() == app.recent_repos.len()
-                && app.repo_data.values().all(|d| {
+            let all_loaded = app.store.state().repos.repo_data.len() == app.store.state().repos.recent_repos.len()
+                && app.store.state().repos.repo_data.values().all(|d| {
                     matches!(
                         d.loading_state,
                         LoadingState::Loaded | LoadingState::Error(_)
                     )
                 });
 
-            if all_loaded && app.bootstrap_state == BootstrapState::LoadingPRs {
-                app.bootstrap_state = BootstrapState::Completed;
+            if all_loaded && app.store.state_mut().repos.bootstrap_state == BootstrapState::LoadingPRs {
+                app.store.state_mut().repos.bootstrap_state = BootstrapState::Completed;
                 // Clear loading status and show success
-                app.task_status = Some(TaskStatus {
+                app.store.state_mut().task.status = Some(TaskStatus {
                     message: "All repositories loaded successfully".to_string(),
                     status_type: TaskStatusType::Success,
                 });
@@ -417,36 +280,36 @@ async fn update(app: &mut App, msg: Action) -> Result<Action> {
 
         Action::MergeStatusUpdated(repo_index, pr_number, status) => {
             // Update the merge status for a specific PR
-            if let Some(data) = app.repo_data.get_mut(&repo_index) {
+            if let Some(data) = app.store.state_mut().repos.repo_data.get_mut(&repo_index) {
                 if let Some(pr) = data.prs.iter_mut().find(|pr| pr.number == pr_number) {
                     pr.mergeable = status;
                 }
             }
 
-            // If this is the current repo, update app.prs too
-            if repo_index == app.selected_repo {
-                if let Some(pr) = app.prs.iter_mut().find(|pr| pr.number == pr_number) {
+            // If this is the current repo, update app.store.state().repos.prs too
+            if repo_index == app.store.state().repos.selected_repo {
+                if let Some(pr) = app.store.state_mut().repos.prs.iter_mut().find(|pr| pr.number == pr_number) {
                     pr.mergeable = status;
                 }
             }
 
             // Notify merge bot if it's running
-            if app.merge_bot.is_running() {
-                app.merge_bot.handle_status_update(pr_number, status);
+            if app.store.state().merge_bot.bot.is_running() {
+                app.store.state_mut().merge_bot.bot.handle_status_update(pr_number, status);
             }
         }
 
         Action::RebaseStatusUpdated(repo_index, pr_number, needs_rebase) => {
             // Update the rebase status for a specific PR
-            if let Some(data) = app.repo_data.get_mut(&repo_index) {
+            if let Some(data) = app.store.state_mut().repos.repo_data.get_mut(&repo_index) {
                 if let Some(pr) = data.prs.iter_mut().find(|pr| pr.number == pr_number) {
                     pr.needs_rebase = needs_rebase;
                 }
             }
 
-            // If this is the current repo, update app.prs too
-            if repo_index == app.selected_repo {
-                if let Some(pr) = app.prs.iter_mut().find(|pr| pr.number == pr_number) {
+            // If this is the current repo, update app.store.state().repos.prs too
+            if repo_index == app.store.state().repos.selected_repo {
+                if let Some(pr) = app.store.state_mut().repos.prs.iter_mut().find(|pr| pr.number == pr_number) {
                     pr.needs_rebase = needs_rebase;
                 }
             }
@@ -455,19 +318,22 @@ async fn update(app: &mut App, msg: Action) -> Result<Action> {
         Action::RefreshCurrentRepo => {
             // Trigger background refresh
             if let Some(repo) = app.repo().cloned() {
-                app.loading_state = LoadingState::Loading;
-                let data = app.repo_data.entry(app.selected_repo).or_default();
+                let selected_repo = app.store.state().repos.selected_repo;
+                let filter = app.store.state().repos.filter.clone();
+
+                app.store.state_mut().repos.loading_state = LoadingState::Loading;
+                let data = app.store.state_mut().repos.repo_data.entry(selected_repo).or_default();
                 data.loading_state = LoadingState::Loading;
 
-                app.task_status = Some(TaskStatus {
+                app.store.state_mut().task.status = Some(TaskStatus {
                     message: format!("Refreshing {}/{}...", repo.org, repo.repo),
                     status_type: TaskStatusType::Running,
                 });
 
                 let _ = app.task_tx.send(BackgroundTask::LoadSingleRepo {
-                    repo_index: app.selected_repo,
+                    repo_index: selected_repo,
                     repo,
-                    filter: app.filter.clone(),
+                    filter,
                     octocrab: app.octocrab()?,
                 });
             }
@@ -475,22 +341,26 @@ async fn update(app: &mut App, msg: Action) -> Result<Action> {
 
         Action::CycleFilter => {
             // Cycle to next filter and reload current repo
-            app.filter = app.filter.next();
+            let next_filter = app.store.state().repos.filter.next();
+            app.store.state_mut().repos.filter = next_filter.clone();
 
-            app.task_status = Some(TaskStatus {
-                message: format!("Filtering by: {}", app.filter.label()),
+            let filter_label = next_filter.label();
+            app.store.state_mut().task.status = Some(TaskStatus {
+                message: format!("Filtering by: {}", filter_label),
                 status_type: TaskStatusType::Running,
             });
 
             if let Some(repo) = app.repo().cloned() {
-                app.loading_state = LoadingState::Loading;
-                let data = app.repo_data.entry(app.selected_repo).or_default();
+                let selected_repo = app.store.state().repos.selected_repo;
+
+                app.store.state_mut().repos.loading_state = LoadingState::Loading;
+                let data = app.store.state_mut().repos.repo_data.entry(selected_repo).or_default();
                 data.loading_state = LoadingState::Loading;
 
                 let _ = app.task_tx.send(BackgroundTask::LoadSingleRepo {
-                    repo_index: app.selected_repo,
+                    repo_index: selected_repo,
                     repo,
-                    filter: app.filter.clone(),
+                    filter: next_filter,
                     octocrab: app.octocrab()?,
                 });
             }
@@ -531,7 +401,7 @@ async fn update(app: &mut App, msg: Action) -> Result<Action> {
                 };
 
                 // Set status to show rebase is starting
-                app.task_status = Some(TaskStatus {
+                app.store.state_mut().task.status = Some(TaskStatus {
                     message: format!("Rebasing {} PR(s)...", selected_indices.len()),
                     status_type: TaskStatusType::Running,
                 });
@@ -549,15 +419,15 @@ async fn update(app: &mut App, msg: Action) -> Result<Action> {
             let success = result.is_ok();
 
             // Notify merge bot if it's running
-            if app.merge_bot.is_running() {
-                app.merge_bot.handle_rebase_complete(success);
+            if app.store.state().merge_bot.bot.is_running() {
+                app.store.state_mut().merge_bot.bot.handle_rebase_complete(success);
             }
 
             match result {
                 Ok(_) => {
                     debug!("Rebase completed successfully");
-                    if !app.merge_bot.is_running() {
-                        app.task_status = Some(TaskStatus {
+                    if !app.store.state().merge_bot.bot.is_running() {
+                        app.store.state_mut().task.status = Some(TaskStatus {
                             message: "Rebase completed successfully".to_string(),
                             status_type: TaskStatusType::Success,
                         });
@@ -565,8 +435,8 @@ async fn update(app: &mut App, msg: Action) -> Result<Action> {
                 }
                 Err(err) => {
                     debug!("Rebase failed: {}", err);
-                    if !app.merge_bot.is_running() {
-                        app.task_status = Some(TaskStatus {
+                    if !app.store.state().merge_bot.bot.is_running() {
+                        app.store.state_mut().task.status = Some(TaskStatus {
                             message: format!("Rebase failed: {}", err),
                             status_type: TaskStatusType::Error,
                         });
@@ -581,7 +451,7 @@ async fn update(app: &mut App, msg: Action) -> Result<Action> {
                 let repo_data = app.get_current_repo_data();
                 let selected_count = repo_data.selected_prs.len();
 
-                app.task_status = Some(TaskStatus {
+                app.store.state_mut().task.status = Some(TaskStatus {
                     message: format!("Merging {} PR(s)...", selected_count),
                     status_type: TaskStatusType::Running,
                 });
@@ -600,7 +470,7 @@ async fn update(app: &mut App, msg: Action) -> Result<Action> {
             let repo_data = app.get_current_repo_data();
 
             if repo_data.selected_prs.is_empty() {
-                app.task_status = Some(TaskStatus {
+                app.store.state_mut().task.status = Some(TaskStatus {
                     message: "No PRs selected for merge bot".to_string(),
                     status_type: TaskStatusType::Error,
                 });
@@ -614,8 +484,8 @@ async fn update(app: &mut App, msg: Action) -> Result<Action> {
                     })
                     .collect();
 
-                app.merge_bot.start(pr_data);
-                app.task_status = Some(TaskStatus {
+                app.store.state_mut().merge_bot.bot.start(pr_data);
+                app.store.state_mut().task.status = Some(TaskStatus {
                     message: format!("Merge bot started with {} PR(s)", repo_data.selected_prs.len()),
                     status_type: TaskStatusType::Running,
                 });
@@ -626,28 +496,30 @@ async fn update(app: &mut App, msg: Action) -> Result<Action> {
             let success = result.is_ok();
 
             // Notify merge bot if it's running
-            if app.merge_bot.is_running() {
-                app.merge_bot.handle_merge_complete(success);
+            if app.store.state().merge_bot.bot.is_running() {
+                app.store.state_mut().merge_bot.bot.handle_merge_complete(success);
             }
 
             match result {
                 Ok(_) => {
                     debug!("Merge completed successfully");
-                    if !app.merge_bot.is_running() {
-                        app.task_status = Some(TaskStatus {
+                    if !app.store.state().merge_bot.bot.is_running() {
+                        let selected_repo = app.store.state().repos.selected_repo;
+
+                        app.store.state_mut().task.status = Some(TaskStatus {
                             message: "Merge completed successfully".to_string(),
                             status_type: TaskStatusType::Success,
                         });
                         // Clear selections after successful merge (only if not in merge bot)
-                        app.selected_prs.clear();
-                        let data = app.repo_data.entry(app.selected_repo).or_default();
+                        app.store.state_mut().repos.selected_prs.clear();
+                        let data = app.store.state_mut().repos.repo_data.entry(selected_repo).or_default();
                         data.selected_prs.clear();
                     }
                 }
                 Err(err) => {
                     debug!("Merge failed: {}", err);
-                    if !app.merge_bot.is_running() {
-                        app.task_status = Some(TaskStatus {
+                    if !app.store.state().merge_bot.bot.is_running() {
+                        app.store.state_mut().task.status = Some(TaskStatus {
                             message: format!("Merge failed: {}", err),
                             status_type: TaskStatusType::Error,
                         });
@@ -704,7 +576,7 @@ async fn update(app: &mut App, msg: Action) -> Result<Action> {
                 let repo_data = app.get_current_repo_data();
                 if let Some(selected_idx) = repo_data.table_state.selected() {
                     if let Some(pr) = repo_data.prs.get(selected_idx) {
-                        app.task_status = Some(TaskStatus {
+                        app.store.state_mut().task.status = Some(TaskStatus {
                             message: "Loading build logs...".to_string(),
                             status_type: TaskStatusType::Running,
                         });
@@ -733,7 +605,7 @@ async fn update(app: &mut App, msg: Action) -> Result<Action> {
                 let repo_data = app.get_current_repo_data();
                 if let Some(selected_idx) = repo_data.table_state.selected() {
                     if let Some(pr) = repo_data.prs.get(selected_idx) {
-                        app.task_status = Some(TaskStatus {
+                        app.store.state_mut().task.status = Some(TaskStatus {
                             message: format!("Opening PR #{} in IDE...", pr.number),
                             status_type: TaskStatusType::Running,
                         });
@@ -741,8 +613,8 @@ async fn update(app: &mut App, msg: Action) -> Result<Action> {
                         let _ = app.task_tx.send(BackgroundTask::OpenPRInIDE {
                             repo,
                             pr_number: pr.number,
-                            ide_command: app.config.ide_command.clone(),
-                            temp_dir: app.config.temp_dir.clone(),
+                            ide_command: app.store.state().config.ide_command.clone(),
+                            temp_dir: app.store.state().config.temp_dir.clone(),
                         });
                     }
                 }
@@ -750,7 +622,7 @@ async fn update(app: &mut App, msg: Action) -> Result<Action> {
         }
 
         Action::IDEOpenComplete(result) => {
-            app.task_status = Some(match result {
+            app.store.state_mut().task.status = Some(match result {
                 Ok(()) => TaskStatus {
                     message: "IDE opened successfully".to_string(),
                     status_type: TaskStatusType::Success,
@@ -764,42 +636,42 @@ async fn update(app: &mut App, msg: Action) -> Result<Action> {
 
         Action::PRMergedConfirmed(repo_index, pr_number, is_merged) => {
             // Notify merge bot if it's running
-            if app.merge_bot.is_running() && repo_index == app.selected_repo {
-                app.merge_bot.handle_pr_merged_confirmed(pr_number, is_merged);
+            if app.store.state().merge_bot.bot.is_running() && repo_index == app.store.state().repos.selected_repo {
+                app.store.state_mut().merge_bot.bot.handle_pr_merged_confirmed(pr_number, is_merged);
             }
         }
 
         Action::CloseLogPanel => {
             // Context-aware: close shortcuts panel first if open, otherwise close log panel
-            if app.show_shortcuts {
-                app.show_shortcuts = false;
+            if app.store.state().ui.show_shortcuts {
+                app.store.state_mut().ui.show_shortcuts = false;
             } else {
-                app.log_panel = None;
+                app.store.state_mut().log_panel.panel = None;
             }
         }
 
         Action::ToggleShortcuts => {
-            app.show_shortcuts = !app.show_shortcuts;
+            app.store.state_mut().ui.show_shortcuts = !app.store.state().ui.show_shortcuts;
             // Reset scroll when opening
-            if app.show_shortcuts {
-                app.shortcuts_scroll = 0;
+            if app.store.state().ui.show_shortcuts {
+                app.store.state_mut().ui.shortcuts_scroll = 0;
             }
         }
 
         Action::ScrollShortcutsUp => {
-            app.shortcuts_scroll = app.shortcuts_scroll.saturating_sub(1);
+            app.store.state_mut().ui.shortcuts_scroll = app.store.state().ui.shortcuts_scroll.saturating_sub(1);
         }
 
         Action::ScrollShortcutsDown => {
             // Only increment if we haven't reached the bottom
             // max_scroll is calculated during rendering based on actual content/viewport size
-            if app.shortcuts_scroll < app.shortcuts_max_scroll {
-                app.shortcuts_scroll += 1;
+            if app.store.state().ui.shortcuts_scroll < app.store.state().ui.shortcuts_max_scroll {
+                app.store.state_mut().ui.shortcuts_scroll += 1;
             }
         }
 
         Action::NextLogSection => {
-            if let Some(ref mut panel) = app.log_panel {
+            if let Some(ref mut panel) = app.store.state_mut().log_panel.panel {
                 if panel.current_section + 1 < panel.log_sections.len() {
                     panel.current_section += 1;
                     // Jump to the start of this section
@@ -812,7 +684,7 @@ async fn update(app: &mut App, msg: Action) -> Result<Action> {
         }
 
         Action::ToggleTimestamps => {
-            if let Some(ref mut panel) = app.log_panel {
+            if let Some(ref mut panel) = app.store.state_mut().log_panel.panel {
                 panel.show_timestamps = !panel.show_timestamps;
             }
         }
@@ -820,7 +692,7 @@ async fn update(app: &mut App, msg: Action) -> Result<Action> {
         Action::BuildLogsLoaded(log_sections, pr_context) => {
             if !log_sections.is_empty() {
                 let section_count = log_sections.len();
-                app.log_panel = Some(LogPanel {
+                app.store.state_mut().log_panel.panel = Some(LogPanel {
                     log_sections,
                     scroll_offset: 0,
                     current_section: 0,
@@ -828,12 +700,12 @@ async fn update(app: &mut App, msg: Action) -> Result<Action> {
                     pr_context,
                     show_timestamps: false,
                 });
-                app.task_status = Some(TaskStatus {
+                app.store.state_mut().task.status = Some(TaskStatus {
                     message: format!("Build logs loaded ({} check run(s))", section_count),
                     status_type: TaskStatusType::Success,
                 });
             } else {
-                app.task_status = Some(TaskStatus {
+                app.store.state_mut().task.status = Some(TaskStatus {
                     message: "No check runs found for this PR".to_string(),
                     status_type: TaskStatusType::Error,
                 });
@@ -856,8 +728,8 @@ async fn update(app: &mut App, msg: Action) -> Result<Action> {
         }
         Action::NavigateToNextPr => {
             // If log panel is open, scroll down instead
-            if app.log_panel.is_some() {
-                if let Some(ref mut panel) = app.log_panel {
+            if app.store.state().log_panel.panel.is_some() {
+                if let Some(ref mut panel) = app.store.state_mut().log_panel.panel {
                     panel.scroll_offset = panel.scroll_offset.saturating_add(1);
                 }
             } else {
@@ -866,8 +738,8 @@ async fn update(app: &mut App, msg: Action) -> Result<Action> {
         }
         Action::NavigateToPreviousPr => {
             // If log panel is open, scroll up instead
-            if app.log_panel.is_some() {
-                if let Some(ref mut panel) = app.log_panel {
+            if app.store.state().log_panel.panel.is_some() {
+                if let Some(ref mut panel) = app.store.state_mut().log_panel.panel {
                     panel.scroll_offset = panel.scroll_offset.saturating_sub(1);
                 }
             } else {
@@ -876,13 +748,13 @@ async fn update(app: &mut App, msg: Action) -> Result<Action> {
         }
         Action::ScrollLogPanelLeft => {
             // Only handle if log panel is open
-            if let Some(ref mut panel) = app.log_panel {
+            if let Some(ref mut panel) = app.store.state_mut().log_panel.panel {
                 panel.horizontal_scroll = panel.horizontal_scroll.saturating_sub(5);
             }
         }
         Action::ScrollLogPanelRight => {
             // Only handle if log panel is open
-            if let Some(ref mut panel) = app.log_panel {
+            if let Some(ref mut panel) = app.store.state_mut().log_panel.panel {
                 panel.horizontal_scroll = panel.horizontal_scroll.saturating_add(5);
             }
         }
@@ -1721,7 +1593,7 @@ async fn run() -> Result<()> {
 
     loop {
         // Increment spinner frame for animation
-        app.spinner_frame = (app.spinner_frame + 1) % 10;
+        app.store.state_mut().ui.spinner_frame = (app.store.state().ui.spinner_frame + 1) % 10;
 
         t.draw(|f| {
             ui(f, &mut app);
@@ -1734,8 +1606,8 @@ async fn run() -> Result<()> {
         match action {
             Ok(Some(action)) => {
                 if let Err(err) = update(&mut app, action).await {
-                    app.loading_state = LoadingState::Error(err.to_string());
-                    app.should_quit = true;
+                    app.store.state_mut().repos.loading_state = LoadingState::Error(err.to_string());
+                    app.store.state_mut().ui.should_quit = true;
                     debug!("Error updating app: {}", err);
                 }
             }
@@ -1743,12 +1615,12 @@ async fn run() -> Result<()> {
             Err(_) => {
                 // Timeout - continue to redraw (for spinner animation and progress updates)
                 // Also step the merge bot if it's running
-                if app.merge_bot.is_running() {
+                if app.store.state().merge_bot.bot.is_running() {
                     if let Some(repo) = app.repo().cloned() {
                         let repo_data = app.get_current_repo_data();
 
                         // Process next PR in queue
-                        if let Some(action) = app.merge_bot.process_next(&repo_data.prs) {
+                        if let Some(action) = app.store.state_mut().merge_bot.bot.process_next(&repo_data.prs) {
                             use crate::merge_bot::MergeBotAction;
                             match action {
                                 MergeBotAction::DispatchMerge(indices) => {
@@ -1761,8 +1633,8 @@ async fn run() -> Result<()> {
                                             octocrab,
                                         });
                                     }
-                                    app.task_status = Some(TaskStatus {
-                                        message: app.merge_bot.status_message(),
+                                    app.store.state_mut().task.status = Some(TaskStatus {
+                                        message: app.store.state().merge_bot.bot.status_message(),
                                         status_type: TaskStatusType::Running,
                                     });
                                 }
@@ -1776,15 +1648,15 @@ async fn run() -> Result<()> {
                                             octocrab,
                                         });
                                     }
-                                    app.task_status = Some(TaskStatus {
-                                        message: app.merge_bot.status_message(),
+                                    app.store.state_mut().task.status = Some(TaskStatus {
+                                        message: app.store.state().merge_bot.bot.status_message(),
                                         status_type: TaskStatusType::Running,
                                     });
                                 }
                                 MergeBotAction::WaitForCI(_pr_number) => {
                                     // Just update status, CI waiting is now handled via polling
-                                    app.task_status = Some(TaskStatus {
-                                        message: app.merge_bot.status_message(),
+                                    app.store.state_mut().task.status = Some(TaskStatus {
+                                        message: app.store.state().merge_bot.bot.status_message(),
                                         status_type: TaskStatusType::Running,
                                     });
                                 }
@@ -1793,36 +1665,36 @@ async fn run() -> Result<()> {
                                     // is_checking_ci determines sleep duration: 15s for CI, 2s for merge
                                     if let Ok(octocrab) = app.octocrab() {
                                         let _ = app.task_tx.send(BackgroundTask::PollPRMergeStatus {
-                                            repo_index: app.selected_repo,
+                                            repo_index: app.store.state().repos.selected_repo,
                                             repo: repo.clone(),
                                             pr_number,
                                             octocrab,
                                             is_checking_ci,
                                         });
                                     }
-                                    app.task_status = Some(TaskStatus {
-                                        message: app.merge_bot.status_message(),
+                                    app.store.state_mut().task.status = Some(TaskStatus {
+                                        message: app.store.state().merge_bot.bot.status_message(),
                                         status_type: TaskStatusType::Running,
                                     });
                                 }
                                 MergeBotAction::PrSkipped(_pr_number, _reason) => {
                                     // Update status and continue
-                                    app.task_status = Some(TaskStatus {
-                                        message: app.merge_bot.status_message(),
+                                    app.store.state_mut().task.status = Some(TaskStatus {
+                                        message: app.store.state().merge_bot.bot.status_message(),
                                         status_type: TaskStatusType::Running,
                                     });
                                 }
                                 MergeBotAction::Completed => {
-                                    app.task_status = Some(TaskStatus {
-                                        message: app.merge_bot.status_message(),
+                                    app.store.state_mut().task.status = Some(TaskStatus {
+                                        message: app.store.state().merge_bot.bot.status_message(),
                                         status_type: TaskStatusType::Success,
                                     });
                                     // Refresh the PR list
                                     if let Ok(octocrab) = app.octocrab() {
                                         let _ = app.task_tx.send(BackgroundTask::LoadSingleRepo {
-                                            repo_index: app.selected_repo,
+                                            repo_index: app.store.state().repos.selected_repo,
                                             repo: repo.clone(),
-                                            filter: app.filter.clone(),
+                                            filter: app.store.state().repos.filter.clone(),
                                             octocrab,
                                         });
                                     }
@@ -1834,8 +1706,8 @@ async fn run() -> Result<()> {
             }
         }
 
-        if app.should_quit {
-            store_recent_repos(&app.recent_repos)?;
+        if app.store.state().ui.should_quit {
+            store_recent_repos(&app.store.state().repos.recent_repos)?;
             if let Some(repo) = app.repo().cloned() {
                 let persisted_state = PersistedState {
                     selected_repo: repo,
@@ -1854,13 +1726,13 @@ async fn run() -> Result<()> {
 
 fn ui(f: &mut Frame, app: &mut App) {
     // Show bootstrap status if not completed
-    if app.bootstrap_state != BootstrapState::Completed {
+    if app.store.state().repos.bootstrap_state != BootstrapState::Completed {
         render_bootstrap_screen(f, app);
         return;
     }
 
     // If no repositories at all (shouldn't happen after bootstrap completes)
-    if app.recent_repos.is_empty() {
+    if app.store.state().repos.recent_repos.is_empty() {
         f.render_widget(
             Paragraph::new(
                 "No repositories configured. Add repositories to .recent-repositories.json",
@@ -1887,7 +1759,7 @@ fn ui(f: &mut Frame, app: &mut App) {
 
     // Render tabs (always visible when there are repos)
     let tab_titles: Vec<Line> = app
-        .recent_repos
+        .store.state().repos.recent_repos
         .iter()
         .enumerate()
         .map(|(i, repo)| {
@@ -1903,15 +1775,15 @@ fn ui(f: &mut Frame, app: &mut App) {
     let tabs = Tabs::new(tab_titles)
         .block(Block::default().borders(Borders::ALL).title(format!(
             "Projects [Tab/1-9: switch, /: cycle] | Filter: {} [f: cycle]",
-            app.filter.label()
+            app.store.state().repos.filter.label()
         )))
-        .select(app.selected_repo)
-        .style(Style::default().fg(app.colors.row_fg))
+        .select(app.store.state().repos.selected_repo)
+        .style(Style::default().fg(app.store.state().repos.colors.row_fg))
         .highlight_style(
             Style::default()
-                .fg(app.colors.selected_row_style_fg)
+                .fg(app.store.state().repos.colors.selected_row_style_fg)
                 .add_modifier(Modifier::BOLD)
-                .bg(app.colors.header_bg),
+                .bg(app.store.state().repos.colors.header_bg),
         );
 
     f.render_widget(tabs, chunks[0]);
@@ -1954,8 +1826,8 @@ fn ui(f: &mut Frame, app: &mut App) {
         .borders(Borders::ALL);
 
     let header_style = Style::default()
-        .fg(app.colors.header_fg)
-        .bg(app.colors.header_bg);
+        .fg(app.store.state().repos.colors.header_fg)
+        .bg(app.store.state().repos.colors.header_bg);
 
     let header_cells = ["#PR", "Description", "Author", "#Comments", "Status"]
         .iter()
@@ -1967,7 +1839,7 @@ fn ui(f: &mut Frame, app: &mut App) {
 
     let selected_row_style = Style::default()
         .add_modifier(Modifier::REVERSED)
-        .fg(app.colors.selected_row_style_fg);
+        .fg(app.store.state().repos.colors.selected_row_style_fg);
 
     // Check if we should show a message instead of PRs
     if repo_data.prs.is_empty() {
@@ -1979,23 +1851,23 @@ fn ui(f: &mut Frame, app: &mut App) {
 
         let paragraph = Paragraph::new(message)
             .block(block)
-            .style(Style::default().fg(app.colors.row_fg))
+            .style(Style::default().fg(app.store.state().repos.colors.row_fg))
             .alignment(ratatui::layout::Alignment::Center);
 
         f.render_widget(paragraph, table_area);
     } else {
         let rows = repo_data.prs.iter().enumerate().map(|(i, item)| {
             let color = match i % 2 {
-                0 => app.colors.normal_row_color,
-                _ => app.colors.alt_row_color,
+                0 => app.store.state().repos.colors.normal_row_color,
+                _ => app.store.state().repos.colors.alt_row_color,
             };
             let color = if repo_data.selected_prs.contains(&i) {
-                app.colors.selected_cell_style_fg
+                app.store.state().repos.colors.selected_cell_style_fg
             } else {
                 color
             };
             let row: Row = item.into();
-            row.style(Style::new().fg(app.colors.row_fg).bg(color))
+            row.style(Style::new().fg(app.store.state().repos.colors.row_fg).bg(color))
                 .height(1)
         });
 
@@ -2024,15 +1896,15 @@ fn ui(f: &mut Frame, app: &mut App) {
     render_status_line(f, app, chunks[3]);
 
     // Render log panel LAST if it's open - covers only the table area
-    if let Some(ref panel) = app.log_panel {
-        crate::log::render_log_panel_card(f, panel, &app.colors, chunks[1]);
+    if let Some(ref panel) = app.store.state().log_panel.panel {
+        crate::log::render_log_panel_card(f, panel, &app.store.state().repos.colors, chunks[1]);
     }
 
     // Render shortcuts panel on top of everything if visible
-    if app.show_shortcuts {
+    if app.store.state().ui.show_shortcuts {
         let max_scroll =
-            crate::shortcuts::render_shortcuts_panel(f, chunks[1], app.shortcuts_scroll, &app.theme);
-        app.shortcuts_max_scroll = max_scroll;
+            crate::shortcuts::render_shortcuts_panel(f, chunks[1], app.store.state().ui.shortcuts_scroll, &app.store.state().theme);
+        app.store.state_mut().ui.shortcuts_max_scroll = max_scroll;
     }
 }
 
@@ -2044,7 +1916,7 @@ fn render_action_panel(f: &mut Frame, app: &App, area: Rect) {
     let mut actions: Vec<(String, String, Color)> = Vec::new();
 
     // If log panel is open, show log panel shortcuts
-    if app.log_panel.is_some() {
+    if app.store.state().log_panel.panel.is_some() {
         actions.push((
             "↑↓/jk".to_string(),
             "Scroll V".to_string(),
@@ -2063,7 +1935,7 @@ fn render_action_panel(f: &mut Frame, app: &App, area: Rect) {
         actions.push((
             "t".to_string(),
             if app
-                .log_panel
+                .store.state().log_panel.panel
                 .as_ref()
                 .map(|p| p.show_timestamps)
                 .unwrap_or(false)
@@ -2162,7 +2034,7 @@ fn render_action_panel(f: &mut Frame, app: &App, area: Rect) {
             // Label part
             spans.push(Span::styled(
                 format!(" {} ", label),
-                Style::default().fg(app.colors.row_fg),
+                Style::default().fg(app.store.state().repos.colors.row_fg),
             ));
         }
         spans
@@ -2179,7 +2051,7 @@ fn render_action_panel(f: &mut Frame, app: &App, area: Rect) {
 
 /// Render the status line showing background task progress
 fn render_status_line(f: &mut Frame, app: &App, area: Rect) {
-    if let Some(ref status) = app.task_status {
+    if let Some(ref status) = app.store.state().task.status {
         let (icon, color) = match status.status_type {
             TaskStatusType::Running => ("⏳", Color::Yellow),
             TaskStatusType::Success => ("✓", Color::Green),
@@ -2193,7 +2065,7 @@ fn render_status_line(f: &mut Frame, app: &App, area: Rect) {
         );
 
         let paragraph = Paragraph::new(Line::from(status_span))
-            .style(Style::default().bg(app.colors.buffer_bg));
+            .style(Style::default().bg(app.store.state().repos.colors.buffer_bg));
         f.render_widget(paragraph, area);
     }
 }
@@ -2252,15 +2124,15 @@ fn render_bootstrap_screen(f: &mut Frame, app: &App) {
         .split(inner);
 
     // Determine stage info
-    let (stage_message, progress, is_error) = match &app.bootstrap_state {
+    let (stage_message, progress, is_error) = match &app.store.state().repos.bootstrap_state {
         BootstrapState::NotStarted => ("Initializing application...", 0, false),
         BootstrapState::LoadingRepositories => ("Loading repositories...", 25, false),
         BootstrapState::RestoringSession => ("Restoring session...", 50, false),
         BootstrapState::LoadingPRs => {
             // Calculate progress based on loaded repos
-            let total_repos = app.recent_repos.len().max(1);
+            let total_repos = app.store.state().repos.recent_repos.len().max(1);
             let loaded_repos = app
-                .repo_data
+                .store.state().repos.repo_data
                 .values()
                 .filter(|d| {
                     matches!(
@@ -2301,7 +2173,7 @@ fn render_bootstrap_screen(f: &mut Frame, app: &App) {
 
     // Spinner (animated)
     if !is_error {
-        let spinner = SPINNER_FRAMES[app.spinner_frame % SPINNER_FRAMES.len()];
+        let spinner = SPINNER_FRAMES[app.store.state().ui.spinner_frame % SPINNER_FRAMES.len()];
         let spinner_text = format!("{} Loading...", spinner);
         let spinner_widget = Paragraph::new(spinner_text)
             .style(
@@ -2360,61 +2232,76 @@ impl App {
         action_tx: mpsc::UnboundedSender<Action>,
         task_tx: mpsc::UnboundedSender<BackgroundTask>,
     ) -> App {
+        // Initialize Redux store with default state
+        let initial_state = AppState {
+            ui: UiState::default(),
+            repos: ReposState {
+                colors: TableColors::new(&PALETTES[0]),
+                ..ReposState::default()
+            },
+            log_panel: LogPanelState::default(),
+            merge_bot: MergeBotState::default(),
+            task: TaskState::default(),
+            config: Config::load(),
+            theme: Theme::default(),
+        };
+
         App {
+            store: Store::new(initial_state),
             action_tx,
             task_tx,
-            should_quit: false,
-            state: TableState::default(),
-            prs: Vec::new(),
-            recent_repos: Vec::new(),
-            selected_repo: 0,
-            filter: PrFilter::None,
-            selected_prs: Vec::new(),
-            colors: TableColors::new(&PALETTES[0]),
-            loading_state: LoadingState::Idle,
-            bootstrap_state: BootstrapState::NotStarted,
-            repo_data: std::collections::HashMap::new(),
-            task_status: None,
-            log_panel: None,
-            spinner_frame: 0,
-            config: Config::load(),
-            show_shortcuts: false,
-            shortcuts_scroll: 0,
-            shortcuts_max_scroll: 0,
-            theme: Theme::default(),
-            merge_bot: crate::merge_bot::MergeBot::new(),
         }
     }
 
     /// Get the current repo data (read-only)
     fn get_current_repo_data(&self) -> RepoData {
-        self.repo_data
-            .get(&self.selected_repo)
+        self.store
+            .state()
+            .repos
+            .repo_data
+            .get(&self.store.state().repos.selected_repo)
             .cloned()
             .unwrap_or_default()
     }
 
     /// Get the current repo data (mutable)
     fn get_current_repo_data_mut(&mut self) -> &mut RepoData {
-        self.repo_data.entry(self.selected_repo).or_default()
+        let selected_repo = self.store.state().repos.selected_repo;
+        self.store
+            .state_mut()
+            .repos
+            .repo_data
+            .entry(selected_repo)
+            .or_default()
     }
 
     /// Save current state to the repo data before switching tabs
     fn save_current_repo_state(&mut self) {
-        let data = self.repo_data.entry(self.selected_repo).or_default();
-        data.prs = self.prs.clone();
-        data.table_state = self.state.clone();
-        data.selected_prs = self.selected_prs.clone();
-        data.loading_state = self.loading_state.clone();
+        let selected_repo = self.store.state().repos.selected_repo;
+        let prs = self.store.state().repos.prs.clone();
+        let table_state = self.store.state().repos.state.clone();
+        let selected_prs = self.store.state().repos.selected_prs.clone();
+        let loading_state = self.store.state().repos.loading_state.clone();
+
+        let data = self.store
+            .state_mut()
+            .repos
+            .repo_data
+            .entry(selected_repo)
+            .or_default();
+        data.prs = prs;
+        data.table_state = table_state;
+        data.selected_prs = selected_prs;
+        data.loading_state = loading_state;
     }
 
     /// Load state from repo data when switching tabs
     fn load_repo_state(&mut self) {
         let data = self.get_current_repo_data();
-        self.prs = data.prs;
-        self.state = data.table_state;
-        self.selected_prs = data.selected_prs;
-        self.loading_state = data.loading_state;
+        self.store.state_mut().repos.prs = data.prs;
+        self.store.state_mut().repos.state = data.table_state;
+        self.store.state_mut().repos.selected_prs = data.selected_prs;
+        self.store.state_mut().repos.loading_state = data.loading_state;
     }
 
     fn octocrab(&self) -> Result<Octocrab> {
@@ -2426,21 +2313,28 @@ impl App {
     }
 
     fn repo(&self) -> Option<&Repo> {
-        self.recent_repos.get(self.selected_repo)
+        self.store
+            .state()
+            .repos
+            .recent_repos
+            .get(self.store.state().repos.selected_repo)
     }
 
     async fn restore_session(&mut self, state: PersistedState) -> Result<()> {
         // Restore the selected repository from the persisted state
         if let Some(index) = self
+            .store
+            .state()
+            .repos
             .recent_repos
             .iter()
             .position(|r| r == &state.selected_repo)
         {
-            self.selected_repo = index;
+            self.store.state_mut().repos.selected_repo = index;
         } else {
             // If the persisted repo is not found, default to first repo
             debug!("Persisted repository not found in recent repositories, defaulting to first");
-            self.selected_repo = 0;
+            self.store.state_mut().repos.selected_repo = 0;
         }
 
         Ok(())
@@ -2448,18 +2342,18 @@ impl App {
 
     /// Fetch data from GitHub for the selected repository and filter
     async fn fetch_data(&mut self, repo: &Repo) -> Result<()> {
-        self.loading_state = LoadingState::Loading;
+        self.store.state_mut().repos.loading_state = LoadingState::Loading;
 
         let octocrab = self.octocrab()?.clone();
         let repo = repo.clone();
-        let filter = self.filter.clone();
+        let filter = self.store.state().repos.filter.clone();
 
         let github_data =
             tokio::task::spawn(async move { fetch_github_data(&octocrab, &repo, &filter).await })
                 .await??;
-        self.prs = github_data;
+        self.store.state_mut().repos.prs = github_data;
 
-        self.loading_state = LoadingState::Loaded;
+        self.store.state_mut().repos.loading_state = LoadingState::Loaded;
 
         Ok(())
     }
@@ -2479,8 +2373,9 @@ impl App {
         };
 
         // Update both the repo data state and the app state
-        self.state.select(Some(i));
-        let data = self.repo_data.entry(self.selected_repo).or_default();
+        self.store.state_mut().repos.state.select(Some(i));
+        let selected_repo = self.store.state().repos.selected_repo;
+        let data = self.store.state_mut().repos.repo_data.entry(selected_repo).or_default();
         data.table_state.select(Some(i));
     }
 
@@ -2499,8 +2394,9 @@ impl App {
         };
 
         // Update both the repo data state and the app state
-        self.state.select(Some(i));
-        let data = self.repo_data.entry(self.selected_repo).or_default();
+        self.store.state_mut().repos.state.select(Some(i));
+        let selected_repo = self.store.state().repos.selected_repo;
+        let data = self.store.state_mut().repos.repo_data.entry(selected_repo).or_default();
         data.table_state.select(Some(i));
     }
 
@@ -2510,13 +2406,14 @@ impl App {
         let i = repo_data.table_state.selected().unwrap_or(0);
 
         // Update both the app state and repo data
-        if self.selected_prs.contains(&i) {
-            self.selected_prs.retain(|&x| x != i);
+        if self.store.state().repos.selected_prs.contains(&i) {
+            self.store.state_mut().repos.selected_prs.retain(|&x| x != i);
         } else {
-            self.selected_prs.push(i);
+            self.store.state_mut().repos.selected_prs.push(i);
         }
 
-        let data = self.repo_data.entry(self.selected_repo).or_default();
+        let selected_repo = self.store.state().repos.selected_repo;
+        let data = self.store.state_mut().repos.repo_data.entry(selected_repo).or_default();
         if data.selected_prs.contains(&i) {
             data.selected_prs.retain(|&x| x != i);
         } else {
@@ -2527,26 +2424,26 @@ impl App {
     /// Select the next repo (cycle forward through tabs)
     fn select_next_repo(&mut self) {
         self.save_current_repo_state();
-        self.selected_repo = (self.selected_repo + 1) % self.recent_repos.len();
+        self.store.state_mut().repos.selected_repo = (self.store.state().repos.selected_repo + 1) % self.store.state().repos.recent_repos.len();
         self.load_repo_state();
     }
 
     /// Select the previous repo (cycle backward through tabs)
     fn select_previous_repo(&mut self) {
         self.save_current_repo_state();
-        self.selected_repo = if self.selected_repo == 0 {
-            self.recent_repos.len() - 1
+        self.store.state_mut().repos.selected_repo = if self.store.state_mut().repos.selected_repo == 0 {
+            self.store.state().repos.recent_repos.len() - 1
         } else {
-            self.selected_repo - 1
+            self.store.state().repos.selected_repo - 1
         };
         self.load_repo_state();
     }
 
     /// Select a repo by index (for number key shortcuts)
     fn select_repo_by_index(&mut self, index: usize) {
-        if index < self.recent_repos.len() {
+        if index < self.store.state().repos.recent_repos.len() {
             self.save_current_repo_state();
-            self.selected_repo = index;
+            self.store.state_mut().repos.selected_repo = index;
             self.load_repo_state();
         }
     }
@@ -2554,12 +2451,12 @@ impl App {
     /// Load data for all repositories in parallel on startup
     async fn load_all_repos(&mut self) -> Result<()> {
         let octocrab = self.octocrab()?;
-        let filter = self.filter.clone();
-        let repos = self.recent_repos.clone();
+        let filter = self.store.state().repos.filter.clone();
+        let repos = self.store.state().repos.recent_repos.clone();
 
         // Set all repos to loading state
         for i in 0..repos.len() {
-            let data = self.repo_data.entry(i).or_default();
+            let data = self.store.state_mut().repos.repo_data.entry(i).or_default();
             data.loading_state = LoadingState::Loading;
         }
 
@@ -2580,7 +2477,7 @@ impl App {
         // Collect results as they complete
         for task in tasks {
             if let Ok((index, result)) = task.await {
-                let data = self.repo_data.entry(index).or_default();
+                let data = self.store.state_mut().repos.repo_data.entry(index).or_default();
                 match result {
                     Ok(prs) => {
                         data.prs = prs;
@@ -2609,16 +2506,19 @@ impl App {
         };
 
         // Set to loading state
-        self.loading_state = LoadingState::Loading;
-        let data = self.repo_data.entry(self.selected_repo).or_default();
+        let selected_repo = self.store.state().repos.selected_repo;
+        self.store.state_mut().repos.loading_state = LoadingState::Loading;
+        let data = self.store.state_mut().repos.repo_data.entry(selected_repo).or_default();
         data.loading_state = LoadingState::Loading;
 
         self.fetch_data(&repo).await?;
 
         // Update the repo data cache
-        let data = self.repo_data.entry(self.selected_repo).or_default();
-        data.prs = self.prs.clone();
-        data.loading_state = self.loading_state.clone();
+        let prs = self.store.state().repos.prs.clone();
+        let loading_state = self.store.state().repos.loading_state.clone();
+        let data = self.store.state_mut().repos.repo_data.entry(selected_repo).or_default();
+        data.prs = prs;
+        data.loading_state = loading_state;
 
         Ok(())
     }
@@ -2631,9 +2531,9 @@ impl App {
 
         // This function is a placeholder for future implementation
         // It could be used to select a specific repo from a list or input
-        self.selected_prs.clear();
+        self.store.state_mut().repos.selected_prs.clear();
         self.fetch_data(&repo).await?;
-        self.state.select(Some(0));
+        self.store.state_mut().repos.state.select(Some(0));
         Ok(())
     }
 
@@ -2650,8 +2550,8 @@ impl App {
             bail!("No repository selected for rebasing");
         };
         let octocrab = self.octocrab()?;
-        for &pr_index in &self.selected_prs {
-            if let Some(pr) = self.prs.get(pr_index) {
+        for &pr_index in &self.store.state().repos.selected_prs {
+            if let Some(pr) = self.store.state().repos.prs.get(pr_index) {
                 if pr.author.starts_with("dependabot") {
                     debug!("Rebasing PR #{}", pr.number);
 
@@ -2663,7 +2563,7 @@ impl App {
                 debug!("No PR found at index {}", pr_index);
             }
         }
-        debug!("Rebasing selected PRs: {:?}", self.selected_prs);
+        debug!("Rebasing selected PRs: {:?}", self.store.state().repos.selected_prs);
 
         Ok(())
     }
@@ -2674,9 +2574,9 @@ impl App {
             bail!("No repository selected for merging");
         };
         let octocrab = self.octocrab()?;
-        let mut selected_prs = self.selected_prs.clone();
-        for &pr_index in self.selected_prs.iter() {
-            if let Some(pr) = self.prs.get(pr_index) {
+        let mut selected_prs = self.store.state().repos.selected_prs.clone();
+        for &pr_index in self.store.state().repos.selected_prs.iter() {
+            if let Some(pr) = self.store.state().repos.prs.get(pr_index) {
                 debug!("Merging PR #{}", pr.number);
                 match merge(&octocrab, repo, pr).await {
                     Ok(_) => {
@@ -2692,11 +2592,11 @@ impl App {
             }
         }
 
-        // todo: now clean up `self.prs` by those that are not in `selected_prs` anymore,
+        // todo: now clean up `self.store.state().repos.prs` by those that are not in `selected_prs` anymore,
         // there the index of the PRs is to take
 
-        self.selected_prs = selected_prs;
-        debug!("Merging selected PRs: {:?}", self.selected_prs);
+        self.store.state_mut().repos.selected_prs = selected_prs;
+        debug!("Merging selected PRs: {:?}", self.store.state().repos.selected_prs);
 
         Ok(())
     }

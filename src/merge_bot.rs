@@ -47,6 +47,7 @@ pub enum PrQueueStatus {
 }
 
 /// Merge bot orchestrator
+#[derive(Debug, Clone)]
 pub struct MergeBot {
     pub state: MergeBotState,
 }
