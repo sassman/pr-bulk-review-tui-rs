@@ -20,6 +20,7 @@ pub enum Action {
     NavigateToNextPr,
     NavigateToPreviousPr,
     MergeSelectedPrs,
+    StartMergeBot,
     OpenCurrentPrInBrowser,
     OpenBuildLogs,
     OpenInIDE,
@@ -42,6 +43,7 @@ pub enum Action {
     RebaseStatusUpdated(usize, usize, bool), // repo_index, pr_number, needs_rebase
     RebaseComplete(Result<(), String>),
     MergeComplete(Result<(), String>),
+    PRMergedConfirmed(usize, usize, bool), // repo_index, pr_number, is_merged
     BuildLogsLoaded(Vec<crate::log::LogSection>, crate::log::PrContext),
     IDEOpenComplete(Result<(), String>),
 
@@ -136,7 +138,13 @@ pub fn get_shortcuts() -> Vec<ShortcutCategory> {
                     key_display: "m",
                     description: "Merge selected PRs",
                     action: Action::MergeSelectedPrs,
-                    matcher: |key| matches!(key.code, KeyCode::Char('m')),
+                    matcher: |key| matches!(key.code, KeyCode::Char('m')) && !key.modifiers.contains(KeyModifiers::CONTROL),
+                },
+                Shortcut {
+                    key_display: "Ctrl+m",
+                    description: "Start merge bot (auto-merge + rebase queue)",
+                    action: Action::StartMergeBot,
+                    matcher: |key| matches!(key.code, KeyCode::Char('m')) && key.modifiers.contains(KeyModifiers::CONTROL),
                 },
                 Shortcut {
                     key_display: "r",

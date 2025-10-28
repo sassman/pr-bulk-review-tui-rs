@@ -27,6 +27,7 @@ use crate::theme::Theme;
 mod config;
 mod gh;
 mod log;
+mod merge_bot;
 mod pr;
 mod shortcuts;
 mod theme;
@@ -117,6 +118,8 @@ struct App {
     shortcuts_max_scroll: usize,
     // Application theme
     theme: Theme,
+    // Merge bot
+    merge_bot: crate::merge_bot::MergeBot,
 }
 
 #[derive(Debug, Clone)]
@@ -262,6 +265,14 @@ enum BackgroundTask {
         pr_number: usize,
         ide_command: String,
         temp_dir: String,
+    },
+    /// Poll a PR to check if it's actually merged (for merge bot)
+    PollPRMergeStatus {
+        repo_index: usize,
+        repo: Repo,
+        pr_number: usize,
+        octocrab: Octocrab,
+        is_checking_ci: bool, // If true, use longer sleep (15s) for CI checks
     },
 }
 
@@ -418,6 +429,11 @@ async fn update(app: &mut App, msg: Action) -> Result<Action> {
                     pr.mergeable = status;
                 }
             }
+
+            // Notify merge bot if it's running
+            if app.merge_bot.is_running() {
+                app.merge_bot.handle_status_update(pr_number, status);
+            }
         }
 
         Action::RebaseStatusUpdated(repo_index, pr_number, needs_rebase) => {
@@ -529,20 +545,33 @@ async fn update(app: &mut App, msg: Action) -> Result<Action> {
             }
         }
 
-        Action::RebaseComplete(result) => match result {
-            Ok(_) => {
-                debug!("Rebase completed successfully");
-                app.task_status = Some(TaskStatus {
-                    message: "Rebase completed successfully".to_string(),
-                    status_type: TaskStatusType::Success,
-                });
+        Action::RebaseComplete(result) => {
+            let success = result.is_ok();
+
+            // Notify merge bot if it's running
+            if app.merge_bot.is_running() {
+                app.merge_bot.handle_rebase_complete(success);
             }
-            Err(err) => {
-                debug!("Rebase failed: {}", err);
-                app.task_status = Some(TaskStatus {
-                    message: format!("Rebase failed: {}", err),
-                    status_type: TaskStatusType::Error,
-                });
+
+            match result {
+                Ok(_) => {
+                    debug!("Rebase completed successfully");
+                    if !app.merge_bot.is_running() {
+                        app.task_status = Some(TaskStatus {
+                            message: "Rebase completed successfully".to_string(),
+                            status_type: TaskStatusType::Success,
+                        });
+                    }
+                }
+                Err(err) => {
+                    debug!("Rebase failed: {}", err);
+                    if !app.merge_bot.is_running() {
+                        app.task_status = Some(TaskStatus {
+                            message: format!("Rebase failed: {}", err),
+                            status_type: TaskStatusType::Error,
+                        });
+                    }
+                }
             }
         },
 
@@ -566,25 +595,63 @@ async fn update(app: &mut App, msg: Action) -> Result<Action> {
             }
         }
 
+        Action::StartMergeBot => {
+            // Start the merge bot with selected PRs
+            let repo_data = app.get_current_repo_data();
+
+            if repo_data.selected_prs.is_empty() {
+                app.task_status = Some(TaskStatus {
+                    message: "No PRs selected for merge bot".to_string(),
+                    status_type: TaskStatusType::Error,
+                });
+            } else {
+                // Get PR numbers and indices
+                let pr_data: Vec<(usize, usize)> = repo_data
+                    .selected_prs
+                    .iter()
+                    .filter_map(|&idx| {
+                        repo_data.prs.get(idx).map(|pr| (pr.number, idx))
+                    })
+                    .collect();
+
+                app.merge_bot.start(pr_data);
+                app.task_status = Some(TaskStatus {
+                    message: format!("Merge bot started with {} PR(s)", repo_data.selected_prs.len()),
+                    status_type: TaskStatusType::Running,
+                });
+            }
+        }
+
         Action::MergeComplete(result) => {
+            let success = result.is_ok();
+
+            // Notify merge bot if it's running
+            if app.merge_bot.is_running() {
+                app.merge_bot.handle_merge_complete(success);
+            }
+
             match result {
                 Ok(_) => {
                     debug!("Merge completed successfully");
-                    app.task_status = Some(TaskStatus {
-                        message: "Merge completed successfully".to_string(),
-                        status_type: TaskStatusType::Success,
-                    });
-                    // Clear selections after successful merge
-                    app.selected_prs.clear();
-                    let data = app.repo_data.entry(app.selected_repo).or_default();
-                    data.selected_prs.clear();
+                    if !app.merge_bot.is_running() {
+                        app.task_status = Some(TaskStatus {
+                            message: "Merge completed successfully".to_string(),
+                            status_type: TaskStatusType::Success,
+                        });
+                        // Clear selections after successful merge (only if not in merge bot)
+                        app.selected_prs.clear();
+                        let data = app.repo_data.entry(app.selected_repo).or_default();
+                        data.selected_prs.clear();
+                    }
                 }
                 Err(err) => {
                     debug!("Merge failed: {}", err);
-                    app.task_status = Some(TaskStatus {
-                        message: format!("Merge failed: {}", err),
-                        status_type: TaskStatusType::Error,
-                    });
+                    if !app.merge_bot.is_running() {
+                        app.task_status = Some(TaskStatus {
+                            message: format!("Merge failed: {}", err),
+                            status_type: TaskStatusType::Error,
+                        });
+                    }
                 }
             }
         }
@@ -693,6 +760,13 @@ async fn update(app: &mut App, msg: Action) -> Result<Action> {
                     status_type: TaskStatusType::Error,
                 },
             });
+        }
+
+        Action::PRMergedConfirmed(repo_index, pr_number, is_merged) => {
+            // Notify merge bot if it's running
+            if app.merge_bot.is_running() && repo_index == app.selected_repo {
+                app.merge_bot.handle_pr_merged_confirmed(pr_number, is_merged);
+            }
         }
 
         Action::CloseLogPanel => {
@@ -1059,14 +1133,22 @@ fn start_task_worker(
                     selected_indices,
                     octocrab,
                 } => {
+                    use crate::pr::MergeableStatus;
+
                     let mut success = true;
                     for &idx in &selected_indices {
                         if let Some(pr) = prs.get(idx) {
                             // For dependabot PRs, use comment-based rebase
                             if pr.author.starts_with("dependabot") {
-                                if let Err(_) =
-                                    comment(&octocrab, &repo, pr, "@dependabot rebase").await
-                                {
+                                // If PR has conflicts, use "@dependabot recreate" to rebuild the PR
+                                // Otherwise use "@dependabot rebase" for normal rebase
+                                let comment_text = if pr.mergeable == MergeableStatus::Conflicted {
+                                    "@dependabot recreate"
+                                } else {
+                                    "@dependabot rebase"
+                                };
+
+                                if let Err(_) = comment(&octocrab, &repo, pr, comment_text).await {
                                     success = false;
                                 }
                             } else {
@@ -1438,6 +1520,31 @@ fn start_task_worker(
                         return;
                     }
 
+                    // Set origin URL to SSH (gh checkout doesn't do this)
+                    let ssh_url = format!("git@github.com:{}/{}.git", repo.org, repo.repo);
+                    let set_url_output = Command::new("git")
+                        .args(&["remote", "set-url", "origin", &ssh_url])
+                        .current_dir(&pr_dir)
+                        .output();
+
+                    if let Err(err) = set_url_output {
+                        let _ = action_tx.send(Action::IDEOpenComplete(Err(format!(
+                            "Failed to set SSH origin URL: {}",
+                            err
+                        ))));
+                        return;
+                    }
+
+                    let set_url_output = set_url_output.unwrap();
+                    if !set_url_output.status.success() {
+                        let stderr = String::from_utf8_lossy(&set_url_output.stderr);
+                        let _ = action_tx.send(Action::IDEOpenComplete(Err(format!(
+                            "Failed to set SSH origin URL: {}",
+                            stderr
+                        ))));
+                        return;
+                    }
+
                     // Open in IDE
                     let ide_output = Command::new(&ide_command).arg(&pr_dir).spawn();
 
@@ -1450,6 +1557,145 @@ fn start_task_worker(
                                 "Failed to open IDE '{}': {}",
                                 ide_command, err
                             ))));
+                        }
+                    }
+                }
+                BackgroundTask::PollPRMergeStatus {
+                    repo_index,
+                    repo,
+                    pr_number,
+                    octocrab,
+                    is_checking_ci,
+                } => {
+                    // Poll the PR to check status
+                    // Wait before polling to give GitHub time to process
+                    // Use longer sleep (15s) when checking CI, shorter (2s) for merge confirmation
+                    let sleep_duration = if is_checking_ci {
+                        tokio::time::Duration::from_secs(15) // CI can take 4-10 minutes
+                    } else {
+                        tokio::time::Duration::from_secs(2) // Merge is usually quick
+                    };
+                    tokio::time::sleep(sleep_duration).await;
+
+                    match octocrab
+                        .pulls(&repo.org, &repo.repo)
+                        .get(pr_number as u64)
+                        .await
+                    {
+                        Ok(pr_detail) => {
+                            if is_checking_ci {
+                                // When checking CI, use GitHub's mergeable field which considers branch protection
+                                // This properly handles PRs with failed non-required checks
+                                use crate::pr::MergeableStatus;
+
+                                // Check if PR needs rebase
+                                let needs_rebase = if let Some(ref state) = pr_detail.mergeable_state {
+                                    matches!(state, octocrab::models::pulls::MergeableState::Behind)
+                                } else {
+                                    false
+                                };
+
+                                // Check CI/build status
+                                let head_sha = pr_detail.head.sha.clone();
+                                let check_runs_url = format!(
+                                    "/repos/{}/{}/commits/{}/check-runs",
+                                    repo.org, repo.repo, head_sha
+                                );
+
+                                #[derive(Debug, serde::Deserialize)]
+                                struct CheckRunsResponse {
+                                    check_runs: Vec<CheckRun>,
+                                }
+
+                                #[derive(Debug, serde::Deserialize)]
+                                struct CheckRun {
+                                    status: String,
+                                    conclusion: Option<String>,
+                                }
+
+                                let (ci_failed, ci_in_progress) = match octocrab.get::<CheckRunsResponse, _, ()>(&check_runs_url, None::<&()>).await {
+                                    Ok(response) => {
+                                        let failed = response.check_runs.iter().any(|check| {
+                                            check.status == "completed" && matches!(
+                                                check.conclusion.as_deref(),
+                                                Some("failure") | Some("cancelled") | Some("timed_out")
+                                            )
+                                        });
+                                        let in_progress = response.check_runs.iter().any(|check| {
+                                            check.status == "queued" || check.status == "in_progress"
+                                        });
+                                        (failed, in_progress)
+                                    }
+                                    Err(_) => {
+                                        // Fallback: use mergeable_state as indicator
+                                        let failed = if let Some(ref state) = pr_detail.mergeable_state {
+                                            matches!(state, octocrab::models::pulls::MergeableState::Unstable)
+                                        } else {
+                                            false
+                                        };
+                                        (failed, false)
+                                    }
+                                };
+
+                                // Determine status using GitHub's mergeable field
+                                // This properly handles required vs optional check failures
+                                let status = match pr_detail.mergeable {
+                                    Some(false) => {
+                                        // Not mergeable - check why
+                                        if let Some(ref state) = pr_detail.mergeable_state {
+                                            match state {
+                                                octocrab::models::pulls::MergeableState::Dirty => MergeableStatus::Conflicted,
+                                                octocrab::models::pulls::MergeableState::Blocked => {
+                                                    if ci_failed {
+                                                        MergeableStatus::BuildFailed
+                                                    } else if ci_in_progress {
+                                                        MergeableStatus::BuildInProgress
+                                                    } else {
+                                                        MergeableStatus::Blocked
+                                                    }
+                                                }
+                                                _ => MergeableStatus::Blocked,
+                                            }
+                                        } else {
+                                            MergeableStatus::Conflicted
+                                        }
+                                    }
+                                    Some(true) => {
+                                        // PR is mergeable according to GitHub (required checks passed)
+                                        // Even if some non-required checks failed, we can merge
+                                        if ci_in_progress {
+                                            MergeableStatus::BuildInProgress
+                                        } else if needs_rebase {
+                                            MergeableStatus::NeedsRebase
+                                        } else {
+                                            MergeableStatus::Ready
+                                        }
+                                    }
+                                    None => {
+                                        // mergeable status unknown - check if CI is running
+                                        if ci_in_progress {
+                                            MergeableStatus::BuildInProgress
+                                        } else {
+                                            MergeableStatus::Unknown
+                                        }
+                                    }
+                                };
+
+                                let _ = action_tx.send(Action::MergeStatusUpdated(repo_index, pr_number, status));
+                            } else {
+                                // When checking merge confirmation, just check if PR is merged
+                                let is_merged = pr_detail.merged_at.is_some();
+                                let _ = action_tx.send(Action::PRMergedConfirmed(repo_index, pr_number, is_merged));
+                            }
+                        }
+                        Err(_) => {
+                            if is_checking_ci {
+                                // Can't fetch PR, send unknown status
+                                let _ = action_tx.send(Action::MergeStatusUpdated(repo_index, pr_number, crate::pr::MergeableStatus::Unknown));
+                            } else {
+                                // Can't fetch PR, assume not merged yet
+                                let _ = action_tx.send(Action::PRMergedConfirmed(repo_index, pr_number, false));
+                            }
                         }
                     }
                 }
@@ -1495,7 +1741,96 @@ async fn run() -> Result<()> {
             }
             Ok(None) => break, // Channel closed
             Err(_) => {
-                // Timeout - just continue to redraw (for spinner animation and progress updates)
+                // Timeout - continue to redraw (for spinner animation and progress updates)
+                // Also step the merge bot if it's running
+                if app.merge_bot.is_running() {
+                    if let Some(repo) = app.repo().cloned() {
+                        let repo_data = app.get_current_repo_data();
+
+                        // Process next PR in queue
+                        if let Some(action) = app.merge_bot.process_next(&repo_data.prs) {
+                            use crate::merge_bot::MergeBotAction;
+                            match action {
+                                MergeBotAction::DispatchMerge(indices) => {
+                                    // Dispatch merge action
+                                    if let Ok(octocrab) = app.octocrab() {
+                                        let _ = app.task_tx.send(BackgroundTask::Merge {
+                                            repo: repo.clone(),
+                                            prs: repo_data.prs.clone(),
+                                            selected_indices: indices,
+                                            octocrab,
+                                        });
+                                    }
+                                    app.task_status = Some(TaskStatus {
+                                        message: app.merge_bot.status_message(),
+                                        status_type: TaskStatusType::Running,
+                                    });
+                                }
+                                MergeBotAction::DispatchRebase(indices) => {
+                                    // Dispatch rebase action
+                                    if let Ok(octocrab) = app.octocrab() {
+                                        let _ = app.task_tx.send(BackgroundTask::Rebase {
+                                            repo: repo.clone(),
+                                            prs: repo_data.prs.clone(),
+                                            selected_indices: indices,
+                                            octocrab,
+                                        });
+                                    }
+                                    app.task_status = Some(TaskStatus {
+                                        message: app.merge_bot.status_message(),
+                                        status_type: TaskStatusType::Running,
+                                    });
+                                }
+                                MergeBotAction::WaitForCI(_pr_number) => {
+                                    // Just update status, CI waiting is now handled via polling
+                                    app.task_status = Some(TaskStatus {
+                                        message: app.merge_bot.status_message(),
+                                        status_type: TaskStatusType::Running,
+                                    });
+                                }
+                                MergeBotAction::PollMergeStatus(pr_number, is_checking_ci) => {
+                                    // Dispatch polling task to check PR status
+                                    // is_checking_ci determines sleep duration: 15s for CI, 2s for merge
+                                    if let Ok(octocrab) = app.octocrab() {
+                                        let _ = app.task_tx.send(BackgroundTask::PollPRMergeStatus {
+                                            repo_index: app.selected_repo,
+                                            repo: repo.clone(),
+                                            pr_number,
+                                            octocrab,
+                                            is_checking_ci,
+                                        });
+                                    }
+                                    app.task_status = Some(TaskStatus {
+                                        message: app.merge_bot.status_message(),
+                                        status_type: TaskStatusType::Running,
+                                    });
+                                }
+                                MergeBotAction::PrSkipped(_pr_number, _reason) => {
+                                    // Update status and continue
+                                    app.task_status = Some(TaskStatus {
+                                        message: app.merge_bot.status_message(),
+                                        status_type: TaskStatusType::Running,
+                                    });
+                                }
+                                MergeBotAction::Completed => {
+                                    app.task_status = Some(TaskStatus {
+                                        message: app.merge_bot.status_message(),
+                                        status_type: TaskStatusType::Success,
+                                    });
+                                    // Refresh the PR list
+                                    if let Ok(octocrab) = app.octocrab() {
+                                        let _ = app.task_tx.send(BackgroundTask::LoadSingleRepo {
+                                            repo_index: app.selected_repo,
+                                            repo: repo.clone(),
+                                            filter: app.filter.clone(),
+                                            octocrab,
+                                        });
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
 
@@ -2047,6 +2382,7 @@ impl App {
             shortcuts_scroll: 0,
             shortcuts_max_scroll: 0,
             theme: Theme::default(),
+            merge_bot: crate::merge_bot::MergeBot::new(),
         }
     }
 
