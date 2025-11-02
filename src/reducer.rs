@@ -71,6 +71,8 @@ fn repos_reducer(
         // Bootstrap: Load repositories and session
         Action::Bootstrap => {
             state.bootstrap_state = BootstrapState::LoadingRepositories;
+            // Effect: Load .env file if needed (checked by effect executor)
+            effects.push(Effect::LoadEnvFile);
             // Effect: Load repositories from config file
             effects.push(Effect::LoadRepositories);
         }

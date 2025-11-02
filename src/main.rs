@@ -177,6 +177,23 @@ async fn execute_effect(app: &mut App, effect: Effect) -> Result<()> {
     match effect {
         Effect::None => {}
 
+        Effect::LoadEnvFile => {
+            // Load .env file if GITHUB_TOKEN is not already set
+            if std::env::var("GITHUB_TOKEN").is_err() {
+                // Try to load .env file from current directory or parent directories
+                match dotenvy::dotenv() {
+                    Ok(path) => {
+                        debug!("Loaded .env file from: {:?}", path);
+                    }
+                    Err(_) => {
+                        // .env file not found or couldn't be loaded - not an error
+                        // User might have GITHUB_TOKEN set via other means
+                        debug!(".env file not found, will rely on environment variables");
+                    }
+                }
+            }
+        }
+
         Effect::LoadRepositories => {
             // Load repositories from config file
             match loading_recent_repos() {

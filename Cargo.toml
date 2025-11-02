@@ -16,3 +16,4 @@ serde = { version = "1.0", features = ["derive"] }
 toml = "0.8"
 zip = "2.2"
 bytes = "1.9"
+dotenvy = "0.15"

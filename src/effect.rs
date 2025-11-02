@@ -8,6 +8,9 @@ use octocrab::Octocrab;
 /// Effects that reducers can request to be performed
 #[derive(Debug, Clone)]
 pub enum Effect {
+    /// Load .env file if GITHUB_TOKEN is not set
+    LoadEnvFile,
+
     /// Load repositories from config file
     LoadRepositories,
 
