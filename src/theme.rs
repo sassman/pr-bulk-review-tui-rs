@@ -59,7 +59,7 @@ impl Default for Theme {
 }
 
 impl Theme {
-    /// Dark theme (default)
+    /// Dark theme (default) - Cyan/Magenta color scheme
     pub fn dark() -> Self {
         Self {
             // Backgrounds
@@ -68,42 +68,42 @@ impl Theme {
             bg_tertiary: tailwind::SLATE.c800,
             bg_panel: tailwind::SLATE.c800,
 
-            // Text
-            text_primary: tailwind::SLATE.c100,
-            text_secondary: tailwind::SLATE.c200,
-            text_muted: tailwind::SLATE.c400,
-            text_header: tailwind::SLATE.c200,
+            // Text - slightly cyan-tinted
+            text_primary: tailwind::CYAN.c50,
+            text_secondary: tailwind::CYAN.c200,
+            text_muted: tailwind::CYAN.c700,
+            text_header: tailwind::CYAN.c100,
 
-            // Accents
+            // Accents - bright cyan and magenta
             accent_primary: tailwind::CYAN.c400,
-            accent_secondary: tailwind::CYAN.c600,
+            accent_secondary: tailwind::FUCHSIA.c500,
 
-            // Status
-            status_success: tailwind::GREEN.c400,
-            status_error: tailwind::RED.c400,
-            status_warning: tailwind::YELLOW.c400,
-            status_info: tailwind::BLUE.c400,
-            status_checking: tailwind::YELLOW.c400,
+            // Status - cyan/magenta themed
+            status_success: tailwind::CYAN.c400,
+            status_error: tailwind::FUCHSIA.c400,
+            status_warning: tailwind::PURPLE.c400,
+            status_info: tailwind::CYAN.c500,
+            status_checking: tailwind::PURPLE.c400,
 
-            // Actions
-            action_navigate: tailwind::CYAN.c600,
-            action_select: tailwind::GREEN.c700,
-            action_open: tailwind::BLUE.c700,
-            action_refresh: tailwind::PURPLE.c600,
-            action_filter: tailwind::AMBER.c600,
-            action_merge: tailwind::PURPLE.c600,
-            action_rebase: tailwind::ORANGE.c600,
-            action_danger: tailwind::RED.c600,
-            action_help: tailwind::SLATE.c600,
+            // Actions - cyan/magenta/purple palette
+            action_navigate: tailwind::CYAN.c500,
+            action_select: tailwind::CYAN.c600,
+            action_open: tailwind::FUCHSIA.c500,
+            action_refresh: tailwind::PURPLE.c500,
+            action_filter: tailwind::VIOLET.c500,
+            action_merge: tailwind::FUCHSIA.c600,
+            action_rebase: tailwind::PURPLE.c600,
+            action_danger: tailwind::FUCHSIA.c600,
+            action_help: tailwind::CYAN.c700,
 
-            // Selection
-            selected_bg: tailwind::BLUE.c400,
+            // Selection - magenta highlight
+            selected_bg: tailwind::FUCHSIA.c500,
             selected_fg: Color::White,
 
-            // Table
-            table_header_bg: tailwind::BLUE.c500,
-            table_header_fg: tailwind::SLATE.c200,
-            table_row_fg: tailwind::SLATE.c200,
+            // Table - cyan header with magenta accents
+            table_header_bg: tailwind::CYAN.c700,
+            table_header_fg: tailwind::SLATE.c50,
+            table_row_fg: tailwind::CYAN.c100,
             table_row_bg_normal: tailwind::SLATE.c950,
             table_row_bg_alt: tailwind::SLATE.c900,
         }
