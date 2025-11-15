@@ -956,6 +956,7 @@ fn render_status_line(f: &mut Frame, app: &App, area: Rect) {
             TaskStatusType::Running => ("⏳", app.store.state().theme.status_warning),
             TaskStatusType::Success => ("✓", app.store.state().theme.status_success),
             TaskStatusType::Error => ("✗", app.store.state().theme.status_error),
+            TaskStatusType::Warning => ("⚠", app.store.state().theme.status_warning),
         };
 
         let status_text = format!(" {} {}", icon, status.message);

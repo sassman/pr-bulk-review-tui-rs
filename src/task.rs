@@ -1343,6 +1343,8 @@ pub fn start_task_worker(
                         use crate::pr::MergeableStatus;
                         use crate::state::OperationType;
 
+                        debug!("Starting operation monitor for PR #{} ({:?})", pr_number, operation);
+
                         // Get initial PR state to track SHA for rebase detection
                         let mut last_head_sha = None;
                         if let Ok(pr_detail) = octocrab_clone
@@ -1351,12 +1353,19 @@ pub fn start_task_worker(
                             .await
                         {
                             last_head_sha = Some(pr_detail.head.sha.clone());
+                            debug!("Initial SHA for PR #{}: {}", pr_number, pr_detail.head.sha);
                         }
+
+                        // Track consecutive failures to avoid infinite loops
+                        let mut consecutive_failures = 0;
+                        const MAX_CONSECUTIVE_FAILURES: u32 = 5;
 
                         // Monitor for up to 40 checks (20 minutes at 30s intervals)
                         for check_num in 0..40 {
                             // Wait between checks (30 seconds)
                             tokio::time::sleep(tokio::time::Duration::from_secs(30)).await;
+
+                            debug!("Operation monitor check #{} for PR #{}", check_num + 1, pr_number);
 
                             // Send periodic check action
                             let _ = result_tx_clone
@@ -1368,122 +1377,120 @@ pub fn start_task_worker(
                                 .get(pr_number as u64)
                                 .await
                             {
-                                Ok(pr) => pr,
-                                Err(_) => continue, // Skip this check if API fails
+                                Ok(pr) => {
+                                    consecutive_failures = 0; // Reset on success
+                                    pr
+                                }
+                                Err(e) => {
+                                    consecutive_failures += 1;
+                                    debug!("Failed to fetch PR #{} (attempt {}/{}): {}",
+                                        pr_number, consecutive_failures, MAX_CONSECUTIVE_FAILURES, e);
+
+                                    if consecutive_failures >= MAX_CONSECUTIVE_FAILURES {
+                                        debug!("Too many consecutive failures for PR #{}, stopping monitor", pr_number);
+                                        let _ = result_tx_clone.send(
+                                            TaskResult::RemoveFromOperationMonitor(repo_index, pr_number)
+                                        );
+                                        let _ = result_tx_clone.send(TaskResult::TaskStatusUpdate(
+                                            Some(crate::state::TaskStatus {
+                                                message: format!("Monitoring stopped for PR #{} due to API errors", pr_number),
+                                                status_type: crate::state::TaskStatusType::Error,
+                                            })
+                                        ));
+                                        break;
+                                    }
+                                    continue; // Skip this check if API fails
+                                }
                             };
 
                             match operation {
                                 OperationType::Rebase => {
                                     // Check if head SHA changed (rebase completed)
                                     let current_sha = pr_detail.head.sha.clone();
-                                    if let Some(ref prev_sha) = last_head_sha {
+                                    let sha_changed = if let Some(ref prev_sha) = last_head_sha {
                                         if &current_sha != prev_sha {
-                                            // Rebase completed! Now check CI status
-                                            last_head_sha = Some(current_sha.clone());
-
-                                            // Check if CI is running
-                                            match get_pr_ci_status(
-                                                &octocrab_clone,
-                                                &repo_clone,
-                                                &current_sha,
-                                            )
-                                            .await
-                                            {
-                                                Ok((_, build_status)) => {
-                                                    let new_status = match build_status.as_str() {
-                                                        "success" | "neutral" | "skipped" => {
-                                                            MergeableStatus::Ready
-                                                        }
-                                                        "failure" | "cancelled" | "timed_out"
-                                                        | "action_required" => {
-                                                            MergeableStatus::BuildFailed
-                                                        }
-                                                        "pending" | "in_progress" | "queued" => {
-                                                            MergeableStatus::BuildInProgress
-                                                        }
-                                                        _ => MergeableStatus::BuildInProgress,
-                                                    };
-
-                                                    // Update status
-                                                    let _ = result_tx_clone.send(
-                                                        TaskResult::MergeStatusUpdated(
-                                                            repo_index, pr_number, new_status,
-                                                        ),
-                                                    );
-
-                                                    // If CI is done, stop monitoring
-                                                    if matches!(
-                                                        new_status,
-                                                        MergeableStatus::Ready
-                                                            | MergeableStatus::BuildFailed
-                                                    ) {
-                                                        let _ = result_tx_clone.send(
-                                                            TaskResult::RemoveFromOperationMonitor(
-                                                                repo_index, pr_number,
-                                                            ),
-                                                        );
-                                                        break;
-                                                    }
-                                                }
-                                                Err(_) => {
-                                                    // Assume building if we can't check
-                                                    let _ = result_tx_clone.send(
-                                                        TaskResult::MergeStatusUpdated(
-                                                            repo_index,
-                                                            pr_number,
-                                                            MergeableStatus::BuildInProgress,
-                                                        ),
-                                                    );
-                                                }
-                                            }
+                                            debug!("PR #{} SHA changed: {} -> {}", pr_number, prev_sha, current_sha);
+                                            true
+                                        } else {
+                                            false
                                         }
                                     } else {
-                                        // First check after rebase started
-                                        last_head_sha = Some(current_sha);
-                                    }
+                                        debug!("PR #{} first check, SHA: {}", pr_number, current_sha);
+                                        false
+                                    };
 
-                                    // Also check CI status even if SHA hasn't changed (in case CI just started)
-                                    if check_num > 2 {
-                                        // After initial rebasing time
-                                        if let Some(ref sha) = last_head_sha {
-                                            if let Ok((_, build_status)) =
-                                                get_pr_ci_status(&octocrab_clone, &repo_clone, sha)
-                                                    .await
-                                            {
+                                    // Update last SHA
+                                    last_head_sha = Some(current_sha.clone());
+
+                                    // Check CI status (always check after initial rebasing time)
+                                    if sha_changed || check_num > 2 {
+                                        debug!("Checking CI status for PR #{} at SHA {}", pr_number, current_sha);
+
+                                        match get_pr_ci_status(&octocrab_clone, &repo_clone, &current_sha).await {
+                                            Ok((_, build_status)) => {
+                                                debug!("PR #{} CI status: {}", pr_number, build_status);
+
                                                 let new_status = match build_status.as_str() {
                                                     "success" | "neutral" | "skipped" => {
                                                         MergeableStatus::Ready
                                                     }
-                                                    "failure" | "cancelled" | "timed_out"
-                                                    | "action_required" => {
+                                                    "failure" | "cancelled" | "timed_out" | "action_required" => {
                                                         MergeableStatus::BuildFailed
                                                     }
                                                     "pending" | "in_progress" | "queued" => {
                                                         MergeableStatus::BuildInProgress
                                                     }
-                                                    _ => MergeableStatus::BuildInProgress,
+                                                    "unknown" => {
+                                                        // No CI configured - treat as ready after rebase completes
+                                                        if sha_changed {
+                                                            debug!("No CI found for PR #{}, treating as ready", pr_number);
+                                                            MergeableStatus::Ready
+                                                        } else {
+                                                            MergeableStatus::Rebasing
+                                                        }
+                                                    }
+                                                    _ => {
+                                                        debug!("Unknown CI status '{}' for PR #{}, treating as in progress", build_status, pr_number);
+                                                        MergeableStatus::BuildInProgress
+                                                    }
                                                 };
 
                                                 // Update status
                                                 let _ = result_tx_clone.send(
-                                                    TaskResult::MergeStatusUpdated(
-                                                        repo_index, pr_number, new_status,
-                                                    ),
+                                                    TaskResult::MergeStatusUpdated(repo_index, pr_number, new_status),
                                                 );
 
-                                                // If CI is done, stop monitoring
-                                                if matches!(
-                                                    new_status,
-                                                    MergeableStatus::Ready
-                                                        | MergeableStatus::BuildFailed
-                                                ) {
+                                                // If CI is done (or no CI), stop monitoring
+                                                if matches!(new_status, MergeableStatus::Ready | MergeableStatus::BuildFailed) {
+                                                    debug!("PR #{} monitoring complete with status {:?}", pr_number, new_status);
                                                     let _ = result_tx_clone.send(
-                                                        TaskResult::RemoveFromOperationMonitor(
-                                                            repo_index, pr_number,
-                                                        ),
+                                                        TaskResult::RemoveFromOperationMonitor(repo_index, pr_number),
                                                     );
                                                     break;
                                                 }
+                                            }
+                                            Err(e) => {
+                                                consecutive_failures += 1;
+                                                debug!("Failed to get CI status for PR #{} (attempt {}/{}): {}",
+                                                    pr_number, consecutive_failures, MAX_CONSECUTIVE_FAILURES, e);
+
+                                                if consecutive_failures >= MAX_CONSECUTIVE_FAILURES {
+                                                    debug!("Too many CI status failures for PR #{}, stopping monitor", pr_number);
+                                                    let _ = result_tx_clone.send(
+                                                        TaskResult::RemoveFromOperationMonitor(repo_index, pr_number)
+                                                    );
+                                                    let _ = result_tx_clone.send(TaskResult::MergeStatusUpdated(
+                                                        repo_index, pr_number, MergeableStatus::Unknown,
+                                                    ));
+                                                    break;
+                                                }
+
+                                                // Set to building while we retry
+                                                let _ = result_tx_clone.send(
+                                                    TaskResult::MergeStatusUpdated(
+                                                        repo_index, pr_number, MergeableStatus::BuildInProgress,
+                                                    ),
+                                                );
                                             }
                                         }
                                     }
@@ -1492,59 +1499,53 @@ pub fn start_task_worker(
                                     // Check if PR is merged
                                     if pr_detail.merged_at.is_some() {
                                         // Merge successful!
+                                        debug!("PR #{} successfully merged!", pr_number);
                                         let _ = result_tx_clone.send(
-                                            TaskResult::RemoveFromOperationMonitor(
-                                                repo_index, pr_number,
-                                            ),
+                                            TaskResult::RemoveFromOperationMonitor(repo_index, pr_number),
                                         );
                                         let _ = result_tx_clone.send(TaskResult::TaskStatusUpdate(
                                             Some(crate::state::TaskStatus {
-                                                message: format!(
-                                                    "PR #{} successfully merged!",
-                                                    pr_number
-                                                ),
+                                                message: format!("PR #{} successfully merged!", pr_number),
                                                 status_type: crate::state::TaskStatusType::Success,
                                             }),
                                         ));
                                         // Trigger repo reload to remove merged PR from list
                                         let _ = result_tx_clone.send(TaskResult::RepoNeedsReload(repo_index));
                                         break;
-                                    } else if matches!(
-                                        pr_detail.state,
-                                        Some(octocrab::models::IssueState::Closed)
-                                    ) {
+                                    } else if matches!(pr_detail.state, Some(octocrab::models::IssueState::Closed)) {
                                         // PR was closed without merging
+                                        debug!("PR #{} was closed without merging", pr_number);
                                         let _ = result_tx_clone.send(
-                                            TaskResult::RemoveFromOperationMonitor(
-                                                repo_index, pr_number,
-                                            ),
+                                            TaskResult::RemoveFromOperationMonitor(repo_index, pr_number),
                                         );
                                         let _ = result_tx_clone.send(TaskResult::TaskStatusUpdate(
                                             Some(crate::state::TaskStatus {
-                                                message: format!(
-                                                    "PR #{} was closed without merging",
-                                                    pr_number
-                                                ),
+                                                message: format!("PR #{} was closed without merging", pr_number),
                                                 status_type: crate::state::TaskStatusType::Error,
                                             }),
                                         ));
                                         break;
                                     }
 
-                                    // Check if merge failed (check for error states)
                                     // Update status to show we're still merging
+                                    debug!("PR #{} still merging (check #{})", pr_number, check_num + 1);
                                     let _ = result_tx_clone.send(TaskResult::MergeStatusUpdated(
-                                        repo_index,
-                                        pr_number,
-                                        MergeableStatus::Merging,
+                                        repo_index, pr_number, MergeableStatus::Merging,
                                     ));
                                 }
                             }
                         }
 
                         // If we exit the loop without completing, it's a timeout
+                        debug!("Operation monitor timed out for PR #{} after 20 minutes", pr_number);
                         let _ = result_tx_clone.send(TaskResult::RemoveFromOperationMonitor(
                             repo_index, pr_number,
+                        ));
+                        let _ = result_tx_clone.send(TaskResult::TaskStatusUpdate(
+                            Some(crate::state::TaskStatus {
+                                message: format!("Monitoring timed out for PR #{} after 20 minutes", pr_number),
+                                status_type: crate::state::TaskStatusType::Warning,
+                            })
                         ));
                     });
                 }

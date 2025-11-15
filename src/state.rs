@@ -110,6 +110,7 @@ pub enum TaskStatusType {
     Running,
     Success,
     Error,
+    Warning,
 }
 
 /// Newtype wrapper for GitHub PR numbers, providing type safety.
