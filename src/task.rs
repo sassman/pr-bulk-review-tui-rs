@@ -27,6 +27,9 @@ pub enum TaskResult {
     /// Rebase status updated for a PR
     RebaseStatusUpdated(usize, usize, bool), // repo_index, pr_number, needs_rebase
 
+    /// Comment count updated for a PR
+    CommentCountUpdated(usize, usize, usize), // repo_index, pr_number, comment_count
+
     /// Rebase operation completed
     RebaseComplete(Result<(), String>),
 
@@ -79,6 +82,12 @@ pub enum BackgroundTask {
         octocrab: Octocrab,
     },
     CheckMergeStatus {
+        repo_index: usize,
+        repo: Repo,
+        pr_numbers: Vec<usize>,
+        octocrab: Octocrab,
+    },
+    CheckCommentCounts {
         repo_index: usize,
         repo: Repo,
         pr_numbers: Vec<usize>,
@@ -362,6 +371,49 @@ pub fn start_task_worker(
                                 }
                                 Err(_) => {
                                     // Failed to fetch, keep as unknown
+                                }
+                            }
+                        });
+                        tasks.push(task);
+                    }
+
+                    // Wait for all checks to complete
+                    for task in tasks {
+                        let _ = task.await;
+                    }
+                }
+                BackgroundTask::CheckCommentCounts {
+                    repo_index,
+                    repo,
+                    pr_numbers,
+                    octocrab,
+                } => {
+                    // Check comment counts for each PR in parallel
+                    let mut tasks = Vec::new();
+                    for pr_number in pr_numbers {
+                        let octocrab = octocrab.clone();
+                        let repo = repo.clone();
+                        let result_tx = result_tx.clone();
+
+                        let task = tokio::spawn(async move {
+                            // Fetch detailed PR info to get accurate comment count
+                            match octocrab
+                                .pulls(&repo.org, &repo.repo)
+                                .get(pr_number as u64)
+                                .await
+                            {
+                                Ok(pr_detail) => {
+                                    // Get total comment count (includes review comments + issue comments)
+                                    let comment_count = pr_detail.comments.unwrap_or(0) as usize;
+
+                                    let _ = result_tx.send(TaskResult::CommentCountUpdated(
+                                        repo_index,
+                                        pr_number,
+                                        comment_count,
+                                    ));
+                                }
+                                Err(_) => {
+                                    // Failed to fetch, keep existing count
                                 }
                             }
                         });

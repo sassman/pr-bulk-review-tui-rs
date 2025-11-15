@@ -62,6 +62,7 @@ pub enum Action {
     RefreshComplete(Result<Vec<crate::pr::Pr>, String>),
     MergeStatusUpdated(usize, usize, crate::pr::MergeableStatus), // repo_index, pr_number, status
     RebaseStatusUpdated(usize, usize, bool), // repo_index, pr_number, needs_rebase
+    CommentCountUpdated(usize, usize, usize), // repo_index, pr_number, comment_count
     RebaseComplete(Result<(), String>),
     MergeComplete(Result<(), String>),
     RerunJobsComplete(Result<(), String>),

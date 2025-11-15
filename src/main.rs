@@ -169,6 +169,9 @@ fn result_to_action(result: TaskResult) -> Action {
         TaskResult::RebaseStatusUpdated(idx, pr_num, needs_rebase) => {
             Action::RebaseStatusUpdated(idx, pr_num, needs_rebase)
         }
+        TaskResult::CommentCountUpdated(idx, pr_num, count) => {
+            Action::CommentCountUpdated(idx, pr_num, count)
+        }
         TaskResult::RebaseComplete(res) => Action::RebaseComplete(res),
         TaskResult::MergeComplete(res) => Action::MergeComplete(res),
         TaskResult::RerunJobsComplete(res) => Action::RerunJobsComplete(res),

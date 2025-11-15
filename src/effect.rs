@@ -58,6 +58,13 @@ pub enum Effect {
         pr_numbers: Vec<usize>,
     },
 
+    /// Trigger background comment count checks
+    CheckCommentCounts {
+        repo_index: usize,
+        repo: Repo,
+        pr_numbers: Vec<usize>,
+    },
+
     /// Perform rebase operation
     PerformRebase { repo: Repo, prs: Vec<Pr> },
 
@@ -269,6 +276,20 @@ pub async fn execute_effect(app: &mut App, effect: Effect) -> Result<Vec<Action>
             // Note: CheckRebaseStatus is checked as part of CheckMergeStatus
             // This effect exists for future extensibility
             // For now, no-op as rebase status is determined from merge status
+        }
+
+        Effect::CheckCommentCounts {
+            repo_index,
+            repo,
+            pr_numbers,
+        } => {
+            // Trigger background comment count checks
+            let _ = app.task_tx.send(BackgroundTask::CheckCommentCounts {
+                repo_index,
+                repo,
+                pr_numbers,
+                octocrab: app.octocrab()?,
+            });
         }
 
         Effect::PerformRebase { repo, prs } => {

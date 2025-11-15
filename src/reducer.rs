@@ -336,6 +336,12 @@ fn repos_reducer(
                 let pr_numbers: Vec<usize> = prs.iter().map(|pr| pr.number).collect();
                 effects.push(Effect::CheckMergeStatus {
                     repo_index: *repo_index,
+                    repo: repo.clone(),
+                    pr_numbers: pr_numbers.clone(),
+                });
+                // Effect: Check comment counts for loaded PRs
+                effects.push(Effect::CheckCommentCounts {
+                    repo_index: *repo_index,
                     repo,
                     pr_numbers,
                 });
@@ -452,6 +458,21 @@ fn repos_reducer(
             if *repo_index == state.selected_repo {
                 if let Some(pr) = state.prs.iter_mut().find(|p| p.number == *pr_number) {
                     pr.needs_rebase = *needs_rebase;
+                }
+            }
+        }
+        Action::CommentCountUpdated(repo_index, pr_number, comment_count) => {
+            // Update PR comment count in repo_data
+            if let Some(data) = state.repo_data.get_mut(repo_index) {
+                if let Some(pr) = data.prs.iter_mut().find(|p| p.number == *pr_number) {
+                    pr.no_comments = *comment_count;
+                }
+            }
+
+            // Sync legacy fields if this is the selected repo
+            if *repo_index == state.selected_repo {
+                if let Some(pr) = state.prs.iter_mut().find(|p| p.number == *pr_number) {
+                    pr.no_comments = *comment_count;
                 }
             }
         }
