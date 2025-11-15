@@ -32,8 +32,9 @@ pub struct DebugConsoleLogger {
 impl DebugConsoleLogger {
     /// Create a new debug console logger with env_logger backend
     pub fn new(logs: LogBuffer) -> Self {
-        // Create env_logger with default configuration
+        // Create env_logger with default to Debug level (can be overridden by RUST_LOG)
         let env_logger = env_logger::Builder::from_default_env()
+            .filter_level(log::LevelFilter::Debug) // Default to Debug if RUST_LOG not set
             .build();
 
         Self { logs, env_logger }
@@ -95,6 +96,10 @@ pub fn init_logger() -> LogBuffer {
 
     // Set max level based on env_logger configuration
     log::set_max_level(log::LevelFilter::Debug);
+
+    // Add welcome message to show console is working
+    log::info!("Debug console initialized - press ` or ~ to toggle");
+    log::debug!("Logger configured with Debug level filtering");
 
     logs
 }
