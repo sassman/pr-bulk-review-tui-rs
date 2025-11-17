@@ -743,6 +743,16 @@ pub fn create_log_panel_from_jobs(
 
     for (metadata, job_log) in jobs {
         let job_node = gh_actions_log_parser::job_log_to_tree(job_log);
+
+        // Filter out jobs with no logs AND "/system" in name
+        let has_logs = !job_node.steps.is_empty() && job_node.steps.iter().any(|step| !step.lines.is_empty());
+        let has_system = job_node.name.contains("/system");
+
+        // Skip this job if it has no logs AND has /system in name
+        if !has_logs && has_system {
+            continue;
+        }
+
         let key = format!("{}:{}", metadata.workflow_name, job_node.name);
         job_metadata_map.insert(key, metadata.clone());
 
@@ -752,14 +762,14 @@ pub fn create_log_panel_from_jobs(
             .push((metadata, job_node));
     }
 
-    // Build workflow nodes
+    // Build workflow nodes (jobs already filtered above)
     let mut workflows: Vec<gh_actions_log_parser::WorkflowNode> = workflows_map
         .into_iter()
         .map(|(workflow_name, jobs)| {
             let job_nodes: Vec<gh_actions_log_parser::JobNode> = jobs.into_iter().map(|(_, job)| job).collect();
 
             let total_errors: usize = job_nodes.iter().map(|j| j.error_count).sum();
-            let has_failures = total_errors > 0; // Simplified - we don't have job status from parser
+            let has_failures = total_errors > 0;
 
             gh_actions_log_parser::WorkflowNode {
                 name: workflow_name,

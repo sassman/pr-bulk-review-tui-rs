@@ -1,0 +1,531 @@
+﻿2025-11-15T19:56:47.1869570Z Current runner version: '2.329.0'
+2025-11-15T19:56:47.1886210Z ##[group]Runner Image Provisioner
+2025-11-15T19:56:47.1886710Z Hosted Compute Agent
+2025-11-15T19:56:47.1887030Z Version: 20251016.436
+2025-11-15T19:56:47.1887410Z Commit: 8ab8ac8bfd662a3739dab9fe09456aba92132568
+2025-11-15T19:56:47.1887860Z Build Date: 2025-10-15T20:44:12Z
+2025-11-15T19:56:47.1888220Z ##[endgroup]
+2025-11-15T19:56:47.1888540Z ##[group]Operating System
+2025-11-15T19:56:47.1888890Z macOS
+2025-11-15T19:56:47.1889180Z 15.7.1
+2025-11-15T19:56:47.1889460Z 24G231
+2025-11-15T19:56:47.1889770Z ##[endgroup]
+2025-11-15T19:56:47.1890060Z ##[group]Runner Image
+2025-11-15T19:56:47.1890380Z Image: macos-15-arm64
+2025-11-15T19:56:47.1890680Z Version: 20251104.0104
+2025-11-15T19:56:47.1891360Z Included Software: https://github.com/actions/runner-images/blob/macos-15-arm64/20251104.0104/images/macos/macos-15-arm64-Readme.md
+2025-11-15T19:56:47.1892390Z Image Release: https://github.com/actions/runner-images/releases/tag/macos-15-arm64%2F20251104.0104
+2025-11-15T19:56:47.1892990Z ##[endgroup]
+2025-11-15T19:56:47.1894570Z ##[group]GITHUB_TOKEN Permissions
+2025-11-15T19:56:47.1895780Z Actions: read
+2025-11-15T19:56:47.1896090Z ArtifactMetadata: read
+2025-11-15T19:56:47.1896410Z Attestations: read
+2025-11-15T19:56:47.1896700Z Checks: read
+2025-11-15T19:56:47.1896990Z Contents: read
+2025-11-15T19:56:47.1897280Z Deployments: read
+2025-11-15T19:56:47.1897590Z Discussions: read
+2025-11-15T19:56:47.1897890Z Issues: read
+2025-11-15T19:56:47.1898270Z Metadata: read
+2025-11-15T19:56:47.1898580Z Models: read
+2025-11-15T19:56:47.1898880Z Packages: read
+2025-11-15T19:56:47.1899270Z Pages: read
+2025-11-15T19:56:47.1899580Z PullRequests: read
+2025-11-15T19:56:47.1899910Z RepositoryProjects: read
+2025-11-15T19:56:47.1900370Z SecurityEvents: read
+2025-11-15T19:56:47.1900690Z Statuses: read
+2025-11-15T19:56:47.1901070Z ##[endgroup]
+2025-11-15T19:56:47.1902460Z Secret source: Dependabot
+2025-11-15T19:56:47.1902960Z Prepare workflow directory
+2025-11-15T19:56:47.2161700Z Prepare all required actions
+2025-11-15T19:56:47.2190060Z Getting action download info
+2025-11-15T19:56:47.4039280Z Download action repository 'actions/checkout@v4' (SHA:08eba0b27e820071cde6df949e0beb9ba4906955)
+2025-11-15T19:56:47.8464080Z Download action repository 'dtolnay/rust-toolchain@stable' (SHA:6d9817901c499d6b02debbb57edb38d33daa680b)
+2025-11-15T19:56:49.0092400Z Complete job name: check (macos-latest)
+2025-11-15T19:56:49.0502000Z ##[group]Run actions/checkout@v4
+2025-11-15T19:56:49.0502600Z with:
+2025-11-15T19:56:49.0502930Z   repository: sassman/t-rec-rs
+2025-11-15T19:56:49.0503420Z   token: ***
+2025-11-15T19:56:49.0503710Z   ssh-strict: true
+2025-11-15T19:56:49.0504000Z   ssh-user: git
+2025-11-15T19:56:49.0504300Z   persist-credentials: true
+2025-11-15T19:56:49.0504640Z   clean: true
+2025-11-15T19:56:49.0505850Z   sparse-checkout-cone-mode: true
+2025-11-15T19:56:49.0506310Z   fetch-depth: 1
+2025-11-15T19:56:49.0506640Z   fetch-tags: false
+2025-11-15T19:56:49.0506990Z   show-progress: true
+2025-11-15T19:56:49.0507360Z   lfs: false
+2025-11-15T19:56:49.0507670Z   submodules: false
+2025-11-15T19:56:49.0508010Z   set-safe-directory: true
+2025-11-15T19:56:49.0508570Z ##[endgroup]
+2025-11-15T19:56:49.4701290Z Syncing repository: sassman/t-rec-rs
+2025-11-15T19:56:49.4702980Z ##[group]Getting Git version info
+2025-11-15T19:56:49.4703630Z Working directory is '/Users/runner/work/t-rec-rs/t-rec-rs'
+2025-11-15T19:56:49.4704790Z [command]/opt/homebrew/bin/git version
+2025-11-15T19:56:49.4877500Z git version 2.50.1
+2025-11-15T19:56:49.4920570Z ##[endgroup]
+2025-11-15T19:56:49.4926840Z Copying '/Users/runner/.gitconfig' to '/Users/runner/work/_temp/7e3d424d-24b1-471c-a970-dc136aedc3d5/.gitconfig'
+2025-11-15T19:56:49.4935670Z Temporarily overriding HOME='/Users/runner/work/_temp/7e3d424d-24b1-471c-a970-dc136aedc3d5' before making global git config changes
+2025-11-15T19:56:49.4936920Z Adding repository directory to the temporary git global config as a safe directory
+2025-11-15T19:56:49.4939520Z [command]/opt/homebrew/bin/git config --global --add safe.directory /Users/runner/work/t-rec-rs/t-rec-rs
+2025-11-15T19:56:49.5055170Z Deleting the contents of '/Users/runner/work/t-rec-rs/t-rec-rs'
+2025-11-15T19:56:49.5057400Z ##[group]Initializing the repository
+2025-11-15T19:56:49.5061470Z [command]/opt/homebrew/bin/git init /Users/runner/work/t-rec-rs/t-rec-rs
+2025-11-15T19:56:49.5341110Z hint: Using 'master' as the name for the initial branch. This default branch name
+2025-11-15T19:56:49.5355180Z hint: is subject to change. To configure the initial branch name to use in all
+2025-11-15T19:56:49.5359090Z hint: of your new repositories, which will suppress this warning, call:
+2025-11-15T19:56:49.5359950Z hint:
+2025-11-15T19:56:49.5360550Z hint: 	git config --global init.defaultBranch <name>
+2025-11-15T19:56:49.5362980Z hint:
+2025-11-15T19:56:49.5363630Z hint: Names commonly chosen instead of 'master' are 'main', 'trunk' and
+2025-11-15T19:56:49.5364890Z hint: 'development'. The just-created branch can be renamed via this command:
+2025-11-15T19:56:49.5366400Z hint:
+2025-11-15T19:56:49.5366890Z hint: 	git branch -m <name>
+2025-11-15T19:56:49.5367340Z hint:
+2025-11-15T19:56:49.5368030Z hint: Disable this message with "git config set advice.defaultBranchName false"
+2025-11-15T19:56:49.5369040Z Initialized empty Git repository in /Users/runner/work/t-rec-rs/t-rec-rs/.git/
+2025-11-15T19:56:49.5373100Z [command]/opt/homebrew/bin/git remote add origin https://github.com/sassman/t-rec-rs
+2025-11-15T19:56:49.5446570Z ##[endgroup]
+2025-11-15T19:56:49.5467900Z ##[group]Disabling automatic garbage collection
+2025-11-15T19:56:49.5480930Z [command]/opt/homebrew/bin/git config --local gc.auto 0
+2025-11-15T19:56:49.5529310Z ##[endgroup]
+2025-11-15T19:56:49.5529970Z ##[group]Setting up auth
+2025-11-15T19:56:49.5533750Z [command]/opt/homebrew/bin/git config --local --name-only --get-regexp core\.sshCommand
+2025-11-15T19:56:49.5611180Z [command]/opt/homebrew/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2025-11-15T19:56:49.6955870Z [command]/opt/homebrew/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2025-11-15T19:56:49.7012390Z [command]/opt/homebrew/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2025-11-15T19:56:49.7784670Z [command]/opt/homebrew/bin/git config --local http.https://github.com/.extraheader AUTHORIZATION: basic ***
+2025-11-15T19:56:49.7794510Z ##[endgroup]
+2025-11-15T19:56:49.7802690Z ##[group]Fetching the repository
+2025-11-15T19:56:49.7805960Z [command]/opt/homebrew/bin/git -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules --depth=1 origin +f975069e1499f28fa22dc733cbd3e51d4847f739:refs/remotes/pull/260/merge
+2025-11-15T19:56:51.1117640Z From https://github.com/sassman/t-rec-rs
+2025-11-15T19:56:51.1119070Z  * [new ref]         f975069e1499f28fa22dc733cbd3e51d4847f739 -> pull/260/merge
+2025-11-15T19:56:51.1237530Z ##[endgroup]
+2025-11-15T19:56:51.1238840Z ##[group]Determining the checkout info
+2025-11-15T19:56:51.1242580Z ##[endgroup]
+2025-11-15T19:56:51.1243250Z [command]/opt/homebrew/bin/git sparse-checkout disable
+2025-11-15T19:56:51.1275380Z [command]/opt/homebrew/bin/git config --local --unset-all extensions.worktreeConfig
+2025-11-15T19:56:51.1337790Z ##[group]Checking out the ref
+2025-11-15T19:56:51.1339640Z [command]/opt/homebrew/bin/git checkout --progress --force refs/remotes/pull/260/merge
+2025-11-15T19:56:51.1767580Z HEAD is now at f975069 Merge e671724e710122a3eb0dd5adf13719cbf40f5109 into 7e209bdc27e32232e9b404dda42d5d43d522fe17
+2025-11-15T19:56:51.2072350Z ##[endgroup]
+2025-11-15T19:56:51.2174790Z [command]/opt/homebrew/bin/git log -1 --format=%H
+2025-11-15T19:56:51.2176130Z f975069e1499f28fa22dc733cbd3e51d4847f739
+2025-11-15T19:56:51.2486690Z ##[warning]Unexpected input(s) 'default', 'profile', valid inputs are ['toolchain', 'targets', 'target', 'components']
+2025-11-15T19:56:51.2503060Z ##[group]Run dtolnay/rust-toolchain@stable
+2025-11-15T19:56:51.2503810Z with:
+2025-11-15T19:56:51.2504330Z   toolchain: stable
+2025-11-15T19:56:51.2504980Z   default: true
+2025-11-15T19:56:51.2505540Z   profile: minimal
+2025-11-15T19:56:51.2506150Z   components: clippy, rustfmt
+2025-11-15T19:56:51.2506820Z ##[endgroup]
+2025-11-15T19:56:51.2622380Z ##[group]Run : parse toolchain version
+2025-11-15T19:56:51.2623190Z [36;1m: parse toolchain version[0m
+2025-11-15T19:56:51.2623880Z [36;1mif [[ -z $toolchain ]]; then[0m
+2025-11-15T19:56:51.2625060Z [36;1m  # GitHub does not enforce `required: true` inputs itself. https://github.com/actions/runner/issues/1070[0m
+2025-11-15T19:56:51.2626330Z [36;1m  echo "'toolchain' is a required input" >&2[0m
+2025-11-15T19:56:51.2627060Z [36;1m  exit 1[0m
+2025-11-15T19:56:51.2627960Z [36;1melif [[ $toolchain =~ ^stable' '[0-9]+' '(year|month|week|day)s?' 'ago$ ]]; then[0m
+2025-11-15T19:56:51.2628950Z [36;1m  if [[ macOS == macOS ]]; then[0m
+2025-11-15T19:56:51.2630160Z [36;1m    echo "toolchain=1.$((($(date -v-$(sed 's/stable \([0-9]*\) \(.\).*/\1\2/' <<< $toolchain) +%s)/60/60/24-16569)/7/6))" >> $GITHUB_OUTPUT[0m
+2025-11-15T19:56:51.2631340Z [36;1m  else[0m
+2025-11-15T19:56:51.2632290Z [36;1m    echo "toolchain=1.$((($(date --date "${toolchain#stable }" +%s)/60/60/24-16569)/7/6))" >> $GITHUB_OUTPUT[0m
+2025-11-15T19:56:51.2633420Z [36;1m  fi[0m
+2025-11-15T19:56:51.2634180Z [36;1melif [[ $toolchain =~ ^stable' 'minus' '[0-9]+' 'releases?$ ]]; then[0m
+2025-11-15T19:56:51.2635520Z [36;1m  echo "toolchain=1.$((($(date +%s)/60/60/24-16569)/7/6-${toolchain//[^0-9]/}))" >> $GITHUB_OUTPUT[0m
+2025-11-15T19:56:51.2636670Z [36;1melif [[ $toolchain =~ ^1\.[0-9]+$ ]]; then[0m
+2025-11-15T19:56:51.2637930Z [36;1m  echo "toolchain=1.$((i=${toolchain#1.}, c=($(date +%s)/60/60/24-16569)/7/6, i+9*i*(10*i<=c)+90*i*(100*i<=c)))" >> $GITHUB_OUTPUT[0m
+2025-11-15T19:56:51.2639120Z [36;1melse[0m
+2025-11-15T19:56:51.2639770Z [36;1m  echo "toolchain=$toolchain" >> $GITHUB_OUTPUT[0m
+2025-11-15T19:56:51.2640530Z [36;1mfi[0m
+2025-11-15T19:56:51.2693740Z shell: /bin/bash --noprofile --norc -e -o pipefail {0}
+2025-11-15T19:56:51.2694870Z env:
+2025-11-15T19:56:51.2695440Z   toolchain: stable
+2025-11-15T19:56:51.2696020Z ##[endgroup]
+2025-11-15T19:56:51.3129750Z ##[group]Run : construct rustup command line
+2025-11-15T19:56:51.3130570Z [36;1m: construct rustup command line[0m
+2025-11-15T19:56:51.3132840Z [36;1mecho "targets=$(for t in ${targets//,/ }; do echo -n ' --target' $t; done)" >> $GITHUB_OUTPUT[0m
+2025-11-15T19:56:51.3134350Z [36;1mecho "components=$(for c in ${components//,/ }; do echo -n ' --component' $c; done)" >> $GITHUB_OUTPUT[0m
+2025-11-15T19:56:51.3135490Z [36;1mecho "downgrade=" >> $GITHUB_OUTPUT[0m
+2025-11-15T19:56:51.3170310Z shell: /bin/bash --noprofile --norc -e -o pipefail {0}
+2025-11-15T19:56:51.3171130Z env:
+2025-11-15T19:56:51.3171610Z   targets: 
+2025-11-15T19:56:51.3172260Z   components: clippy, rustfmt
+2025-11-15T19:56:51.3172860Z ##[endgroup]
+2025-11-15T19:56:51.3538950Z ##[group]Run : set $CARGO_HOME
+2025-11-15T19:56:51.3539660Z [36;1m: set $CARGO_HOME[0m
+2025-11-15T19:56:51.3540450Z [36;1mecho CARGO_HOME=${CARGO_HOME:-"$HOME/.cargo"} >> $GITHUB_ENV[0m
+2025-11-15T19:56:51.3583140Z shell: /bin/bash --noprofile --norc -e -o pipefail {0}
+2025-11-15T19:56:51.3583980Z ##[endgroup]
+2025-11-15T19:56:51.3978610Z ##[group]Run : install rustup if needed
+2025-11-15T19:56:51.3979440Z [36;1m: install rustup if needed[0m
+2025-11-15T19:56:51.3980180Z [36;1mif ! command -v rustup &>/dev/null; then[0m
+2025-11-15T19:56:51.3981860Z [36;1m  curl --proto '=https' --tlsv1.2 --retry 10 --retry-connrefused --location --silent --show-error --fail https://sh.rustup.rs | sh -s -- --default-toolchain none -y[0m
+2025-11-15T19:56:51.3983890Z [36;1m  echo "$CARGO_HOME/bin" >> $GITHUB_PATH[0m
+2025-11-15T19:56:51.3984990Z [36;1mfi[0m
+2025-11-15T19:56:51.4020670Z shell: /bin/bash --noprofile --norc -e -o pipefail {0}
+2025-11-15T19:56:51.4021670Z env:
+2025-11-15T19:56:51.4022250Z   CARGO_HOME: /Users/runner/.cargo
+2025-11-15T19:56:51.4022980Z ##[endgroup]
+2025-11-15T19:56:51.4472200Z ##[group]Run rustup toolchain install stable --component clippy --component rustfmt --profile minimal --no-self-update
+2025-11-15T19:56:51.4474060Z [36;1mrustup toolchain install stable --component clippy --component rustfmt --profile minimal --no-self-update[0m
+2025-11-15T19:56:51.4529230Z shell: /bin/bash --noprofile --norc -e -o pipefail {0}
+2025-11-15T19:56:51.4530060Z env:
+2025-11-15T19:56:51.4530660Z   CARGO_HOME: /Users/runner/.cargo
+2025-11-15T19:56:51.4531380Z ##[endgroup]
+2025-11-15T19:56:52.0306800Z info: syncing channel updates for 'stable-aarch64-apple-darwin'
+2025-11-15T19:56:52.1502760Z info: latest update on 2025-11-10, rust version 1.91.1 (ed61e7d7e 2025-11-07)
+2025-11-15T19:56:52.1821240Z info: downloading component 'clippy'
+2025-11-15T19:56:52.2134240Z info: downloading component 'rustfmt'
+2025-11-15T19:56:52.2660290Z info: downloading component 'cargo'
+2025-11-15T19:56:52.3593890Z info: downloading component 'rust-std'
+2025-11-15T19:56:52.6093180Z info: downloading component 'rustc'
+2025-11-15T19:56:53.2938750Z info: removing previous version of component 'clippy'
+2025-11-15T19:56:53.3066610Z info: removing previous version of component 'rustfmt'
+2025-11-15T19:56:53.3180270Z info: removing previous version of component 'cargo'
+2025-11-15T19:56:53.3355600Z info: removing previous version of component 'rust-std'
+2025-11-15T19:56:53.3358120Z info: removing previous version of component 'rustc'
+2025-11-15T19:56:53.3477290Z info: installing component 'clippy'
+2025-11-15T19:56:53.6868990Z info: installing component 'rustfmt'
+2025-11-15T19:56:53.9033130Z info: installing component 'cargo'
+2025-11-15T19:56:54.4501570Z info: installing component 'rust-std'
+2025-11-15T19:56:56.3223470Z info: installing component 'rustc'
+2025-11-15T19:57:00.0649520Z 
+2025-11-15T19:57:00.2807900Z info: self-update is disabled for this build of rustup
+2025-11-15T19:57:00.2811770Z info: any updates to rustup will need to be fetched with your system package manager
+2025-11-15T19:57:00.2813190Z   stable-aarch64-apple-darwin updated - rustc 1.91.1 (ed61e7d7e 2025-11-07) (from rustc 1.91.0 (f8297e351 2025-10-28))
+2025-11-15T19:57:00.2813610Z 
+2025-11-15T19:57:00.3015720Z ##[group]Run rustup default stable
+2025-11-15T19:57:00.3016040Z [36;1mrustup default stable[0m
+2025-11-15T19:57:00.3202710Z shell: /bin/bash --noprofile --norc -e -o pipefail {0}
+2025-11-15T19:57:00.3203020Z env:
+2025-11-15T19:57:00.3203190Z   CARGO_HOME: /Users/runner/.cargo
+2025-11-15T19:57:00.3203550Z ##[endgroup]
+2025-11-15T19:57:00.4342940Z info: using existing install for 'stable-aarch64-apple-darwin'
+2025-11-15T19:57:00.5033090Z info: default toolchain set to 'stable-aarch64-apple-darwin'
+2025-11-15T19:57:00.5033350Z 
+2025-11-15T19:57:00.5188540Z   stable-aarch64-apple-darwin unchanged - rustc 1.91.1 (ed61e7d7e 2025-11-07)
+2025-11-15T19:57:00.5191810Z 
+2025-11-15T19:57:00.5233370Z ##[group]Run : create cachekey
+2025-11-15T19:57:00.5233750Z [36;1m: create cachekey[0m
+2025-11-15T19:57:00.5234190Z [36;1mDATE=$(rustc +stable --version --verbose | sed -ne 's/^commit-date: \(20[0-9][0-9]\)-\([01][0-9]\)-\([0-3][0-9]\)$/\1\2\3/p')[0m
+2025-11-15T19:57:00.5234760Z [36;1mHASH=$(rustc +stable --version --verbose | sed -ne 's/^commit-hash: //p')[0m
+2025-11-15T19:57:00.5235290Z [36;1mecho "cachekey=$(echo $DATE$HASH | head -c12)" >> $GITHUB_OUTPUT[0m
+2025-11-15T19:57:00.5276470Z shell: /bin/bash --noprofile --norc -e -o pipefail {0}
+2025-11-15T19:57:00.5276820Z env:
+2025-11-15T19:57:00.5277130Z   CARGO_HOME: /Users/runner/.cargo
+2025-11-15T19:57:00.5277410Z ##[endgroup]
+2025-11-15T19:57:00.6604440Z ##[group]Run : disable incremental compilation
+2025-11-15T19:57:00.6604770Z [36;1m: disable incremental compilation[0m
+2025-11-15T19:57:00.6605990Z [36;1mif [ -z "${CARGO_INCREMENTAL+set}" ]; then[0m
+2025-11-15T19:57:00.6606310Z [36;1m  echo CARGO_INCREMENTAL=0 >> $GITHUB_ENV[0m
+2025-11-15T19:57:00.6611640Z [36;1mfi[0m
+2025-11-15T19:57:00.6694780Z shell: /bin/bash --noprofile --norc -e -o pipefail {0}
+2025-11-15T19:57:00.6695200Z env:
+2025-11-15T19:57:00.6695410Z   CARGO_HOME: /Users/runner/.cargo
+2025-11-15T19:57:00.6695750Z ##[endgroup]
+2025-11-15T19:57:00.7318180Z ##[group]Run : enable colors in Cargo output
+2025-11-15T19:57:00.7318600Z [36;1m: enable colors in Cargo output[0m
+2025-11-15T19:57:00.7318910Z [36;1mif [ -z "${CARGO_TERM_COLOR+set}" ]; then[0m
+2025-11-15T19:57:00.7319300Z [36;1m  echo CARGO_TERM_COLOR=always >> $GITHUB_ENV[0m
+2025-11-15T19:57:00.7319560Z [36;1mfi[0m
+2025-11-15T19:57:00.7389040Z shell: /bin/bash --noprofile --norc -e -o pipefail {0}
+2025-11-15T19:57:00.7389370Z env:
+2025-11-15T19:57:00.7389580Z   CARGO_HOME: /Users/runner/.cargo
+2025-11-15T19:57:00.7389910Z   CARGO_INCREMENTAL: 0
+2025-11-15T19:57:00.7390120Z ##[endgroup]
+2025-11-15T19:57:00.7984190Z ##[group]Run : enable Cargo sparse registry
+2025-11-15T19:57:00.7985100Z [36;1m: enable Cargo sparse registry[0m
+2025-11-15T19:57:00.7985960Z [36;1m# implemented in 1.66, stabilized in 1.68, made default in 1.70[0m
+2025-11-15T19:57:00.7989540Z [36;1mif [ -z "${CARGO_REGISTRIES_CRATES_IO_PROTOCOL+set}" -o -f "/Users/runner/work/_temp"/.implicit_cargo_registries_crates_io_protocol ]; then[0m
+2025-11-15T19:57:00.7991420Z [36;1m  if rustc +stable --version --verbose | grep -q '^release: 1\.6[89]\.'; then[0m
+2025-11-15T19:57:00.7993050Z [36;1m    touch "/Users/runner/work/_temp"/.implicit_cargo_registries_crates_io_protocol || true[0m
+2025-11-15T19:57:00.7994440Z [36;1m    echo CARGO_REGISTRIES_CRATES_IO_PROTOCOL=sparse >> $GITHUB_ENV[0m
+2025-11-15T19:57:00.7995830Z [36;1m  elif rustc +stable --version --verbose | grep -q '^release: 1\.6[67]\.'; then[0m
+2025-11-15T19:57:00.7997180Z [36;1m    touch "/Users/runner/work/_temp"/.implicit_cargo_registries_crates_io_protocol || true[0m
+2025-11-15T19:57:00.7998460Z [36;1m    echo CARGO_REGISTRIES_CRATES_IO_PROTOCOL=git >> $GITHUB_ENV[0m
+2025-11-15T19:57:00.7999380Z [36;1m  fi[0m
+2025-11-15T19:57:00.7999750Z [36;1mfi[0m
+2025-11-15T19:57:00.8050290Z shell: /bin/bash --noprofile --norc -e -o pipefail {0}
+2025-11-15T19:57:00.8050580Z env:
+2025-11-15T19:57:00.8050790Z   CARGO_HOME: /Users/runner/.cargo
+2025-11-15T19:57:00.8051030Z   CARGO_INCREMENTAL: 0
+2025-11-15T19:57:00.8051180Z   CARGO_TERM_COLOR: always
+2025-11-15T19:57:00.8051360Z ##[endgroup]
+2025-11-15T19:57:00.9052150Z ##[group]Run : work around spurious network errors in curl 8.0
+2025-11-15T19:57:00.9052520Z [36;1m: work around spurious network errors in curl 8.0[0m
+2025-11-15T19:57:00.9053670Z [36;1m# https://rust-lang.zulipchat.com/#narrow/stream/246057-t-cargo/topic/timeout.20investigation[0m
+2025-11-15T19:57:00.9054140Z [36;1mif rustc +stable --version --verbose | grep -q '^release: 1\.7[01]\.'; then[0m
+2025-11-15T19:57:00.9054500Z [36;1m  echo CARGO_HTTP_MULTIPLEXING=false >> $GITHUB_ENV[0m
+2025-11-15T19:57:00.9054740Z [36;1mfi[0m
+2025-11-15T19:57:00.9090490Z shell: /bin/bash --noprofile --norc -e -o pipefail {0}
+2025-11-15T19:57:00.9090800Z env:
+2025-11-15T19:57:00.9090980Z   CARGO_HOME: /Users/runner/.cargo
+2025-11-15T19:57:00.9091270Z   CARGO_INCREMENTAL: 0
+2025-11-15T19:57:00.9091440Z   CARGO_TERM_COLOR: always
+2025-11-15T19:57:00.9091620Z ##[endgroup]
+2025-11-15T19:57:01.0013980Z ##[group]Run rustc +stable --version --verbose
+2025-11-15T19:57:01.0014290Z [36;1mrustc +stable --version --verbose[0m
+2025-11-15T19:57:01.0056780Z shell: /bin/bash --noprofile --norc -e -o pipefail {0}
+2025-11-15T19:57:01.0057050Z env:
+2025-11-15T19:57:01.0057230Z   CARGO_HOME: /Users/runner/.cargo
+2025-11-15T19:57:01.0057420Z   CARGO_INCREMENTAL: 0
+2025-11-15T19:57:01.0057580Z   CARGO_TERM_COLOR: always
+2025-11-15T19:57:01.0057760Z ##[endgroup]
+2025-11-15T19:57:01.0925720Z rustc 1.91.1 (ed61e7d7e 2025-11-07)
+2025-11-15T19:57:01.0926280Z binary: rustc
+2025-11-15T19:57:01.0927350Z commit-hash: ed61e7d7e242494fb7057f2657300d9e77bb4fcb
+2025-11-15T19:57:01.0927730Z commit-date: 2025-11-07
+2025-11-15T19:57:01.0928380Z host: aarch64-apple-darwin
+2025-11-15T19:57:01.0928660Z release: 1.91.1
+2025-11-15T19:57:01.0930940Z LLVM version: 21.1.2
+2025-11-15T19:57:01.1043410Z ##[group]Run cargo check
+2025-11-15T19:57:01.1043750Z [36;1mcargo check[0m
+2025-11-15T19:57:01.1087090Z shell: /bin/bash -e {0}
+2025-11-15T19:57:01.1087300Z env:
+2025-11-15T19:57:01.1087460Z   CARGO_HOME: /Users/runner/.cargo
+2025-11-15T19:57:01.1087660Z   CARGO_INCREMENTAL: 0
+2025-11-15T19:57:01.1087850Z   CARGO_TERM_COLOR: always
+2025-11-15T19:57:01.1088030Z ##[endgroup]
+2025-11-15T19:57:01.3860910Z [1m[92m    Updating[0m crates.io index
+2025-11-15T19:57:02.3481260Z [1m[92m Downloading[0m crates ...
+2025-11-15T19:57:02.4036180Z [1m[92m  Downloaded[0m core-foundation-sys v0.8.7
+2025-11-15T19:57:02.4271770Z [1m[92m  Downloaded[0m is_terminal_polyfill v1.70.1
+2025-11-15T19:57:02.4365070Z [1m[92m  Downloaded[0m tempfile v3.23.0
+2025-11-15T19:57:02.4553680Z [1m[92m  Downloaded[0m env_logger v0.11.6
+2025-11-15T19:57:02.4649000Z [1m[92m  Downloaded[0m utf8parse v0.2.2
+2025-11-15T19:57:02.4719100Z [1m[92m  Downloaded[0m scopeguard v1.1.0
+2025-11-15T19:57:02.4750640Z [1m[92m  Downloaded[0m unicode-ident v1.0.6
+2025-11-15T19:57:02.4808690Z [1m[92m  Downloaded[0m quote v1.0.38
+2025-11-15T19:57:02.4860360Z [1m[92m  Downloaded[0m log v0.4.28
+2025-11-15T19:57:02.4902540Z [1m[92m  Downloaded[0m getrandom v0.3.1
+2025-11-15T19:57:02.4967010Z [1m[92m  Downloaded[0m objc v0.2.7
+2025-11-15T19:57:02.5009590Z [1m[92m  Downloaded[0m memchr v2.5.0
+2025-11-15T19:57:02.5095680Z [1m[92m  Downloaded[0m moxcms v0.7.5
+2025-11-15T19:57:02.5306400Z [1m[92m  Downloaded[0m clap_builder v4.5.51
+2025-11-15T19:57:02.5448950Z [1m[92m  Downloaded[0m crossbeam-epoch v0.9.13
+2025-11-15T19:57:02.5496040Z [1m[92m  Downloaded[0m crossbeam-deque v0.8.2
+2025-11-15T19:57:02.5521830Z [1m[92m  Downloaded[0m clap v4.5.51
+2025-11-15T19:57:02.5757790Z [1m[92m  Downloaded[0m syn v2.0.96
+2025-11-15T19:57:02.5998990Z [1m[92m  Downloaded[0m regex v1.7.1
+2025-11-15T19:57:02.6174110Z [1m[92m  Downloaded[0m image v0.25.8
+2025-11-15T19:57:02.6348450Z [1m[92m  Downloaded[0m rayon-core v1.13.0
+2025-11-15T19:57:02.6418740Z [1m[92m  Downloaded[0m proc-macro2 v1.0.92
+2025-11-15T19:57:02.6479990Z [1m[92m  Downloaded[0m once_cell v1.20.2
+2025-11-15T19:57:02.6544500Z [1m[92m  Downloaded[0m objc_id v0.1.1
+2025-11-15T19:57:02.6573300Z [1m[92m  Downloaded[0m rustix v1.0.1
+2025-11-15T19:57:02.7014940Z [1m[92m  Downloaded[0m memoffset v0.7.1
+2025-11-15T19:57:02.7032510Z [1m[92m  Downloaded[0m malloc_buf v0.0.6
+2025-11-15T19:57:02.7038950Z [1m[92m  Downloaded[0m lazy_static v1.5.0
+2025-11-15T19:57:02.7073210Z [1m[92m  Downloaded[0m errno v0.3.10
+2025-11-15T19:57:02.7097240Z [1m[92m  Downloaded[0m crossbeam-utils v0.8.14
+2025-11-15T19:57:02.7143640Z [1m[92m  Downloaded[0m strsim v0.11.1
+2025-11-15T19:57:02.7161750Z [1m[92m  Downloaded[0m num-traits v0.2.19
+2025-11-15T19:57:02.7209580Z [1m[92m  Downloaded[0m foreign-types v0.5.0
+2025-11-15T19:57:02.7224120Z [1m[92m  Downloaded[0m fastrand v2.3.0
+2025-11-15T19:57:02.7244270Z [1m[92m  Downloaded[0m either v1.8.0
+2025-11-15T19:57:02.7263860Z [1m[92m  Downloaded[0m core-graphics v0.25.0
+2025-11-15T19:57:02.7298800Z [1m[92m  Downloaded[0m byteorder-lite v0.1.0
+2025-11-15T19:57:02.7314930Z [1m[92m  Downloaded[0m bytemuck v1.13.0
+2025-11-15T19:57:02.7362020Z [1m[92m  Downloaded[0m libc v0.2.169
+2025-11-15T19:57:02.7736890Z [1m[92m  Downloaded[0m bitflags v2.7.0
+2025-11-15T19:57:02.7804650Z [1m[92m  Downloaded[0m anyhow v1.0.100
+2025-11-15T19:57:02.7871740Z [1m[92m  Downloaded[0m anstream v0.6.18
+2025-11-15T19:57:02.7913040Z [1m[92m  Downloaded[0m aho-corasick v0.7.20
+2025-11-15T19:57:02.7978120Z [1m[92m  Downloaded[0m core-foundation v0.10.1
+2025-11-15T19:57:02.8012830Z [1m[92m  Downloaded[0m colorchoice v1.0.3
+2025-11-15T19:57:02.8024520Z [1m[92m  Downloaded[0m block v0.1.6
+2025-11-15T19:57:02.8032290Z [1m[92m  Downloaded[0m anstyle-query v1.1.2
+2025-11-15T19:57:02.8049150Z [1m[92m  Downloaded[0m anstyle-parse v0.2.6
+2025-11-15T19:57:02.8076550Z [1m[92m  Downloaded[0m anstyle v1.0.10
+2025-11-15T19:57:02.8098330Z [1m[92m  Downloaded[0m simplerand v1.6.0
+2025-11-15T19:57:02.8111870Z [1m[92m  Downloaded[0m regex-syntax v0.6.28
+2025-11-15T19:57:02.8211580Z [1m[92m  Downloaded[0m rayon v1.11.0
+2025-11-15T19:57:02.8387050Z [1m[92m  Downloaded[0m objc-foundation v0.1.1
+2025-11-15T19:57:02.8404320Z [1m[92m  Downloaded[0m foreign-types-shared v0.3.1
+2025-11-15T19:57:02.8414360Z [1m[92m  Downloaded[0m foreign-types-macros v0.2.3
+2025-11-15T19:57:02.8433910Z [1m[92m  Downloaded[0m humantime v2.3.0
+2025-11-15T19:57:02.8463930Z [1m[92m  Downloaded[0m env_filter v0.1.3
+2025-11-15T19:57:02.8486050Z [1m[92m  Downloaded[0m core-graphics-types v0.2.0
+2025-11-15T19:57:02.8511300Z [1m[92m  Downloaded[0m clap_lex v0.7.4
+2025-11-15T19:57:02.8536520Z [1m[92m  Downloaded[0m cfg-if v1.0.0
+2025-11-15T19:57:02.8558540Z [1m[92m  Downloaded[0m autocfg v1.1.0
+2025-11-15T19:57:02.8595480Z [1m[92m  Downloaded[0m pxfm v0.1.23
+2025-11-15T19:57:02.9523380Z [1m[92m   Compiling[0m autocfg v1.1.0
+2025-11-15T19:57:02.9546110Z [1m[92m   Compiling[0m libc v0.2.169
+2025-11-15T19:57:02.9553240Z [1m[92m   Compiling[0m proc-macro2 v1.0.92
+2025-11-15T19:57:03.3669950Z [1m[92m    Checking[0m cfg-if v1.0.0
+2025-11-15T19:57:03.3925800Z [1m[92m   Compiling[0m memoffset v0.7.1
+2025-11-15T19:57:06.4125600Z [1m[92m   Compiling[0m memchr v2.5.0
+2025-11-15T19:57:06.4799190Z [1m[92m   Compiling[0m crossbeam-utils v0.8.14
+2025-11-15T19:57:06.6283160Z [1m[92m   Compiling[0m unicode-ident v1.0.6
+2025-11-15T19:57:06.7422330Z [1m[92m   Compiling[0m crossbeam-epoch v0.9.13
+2025-11-15T19:57:06.9559010Z [1m[92m   Compiling[0m num-traits v0.2.19
+2025-11-15T19:57:07.0909160Z [1m[92m    Checking[0m utf8parse v0.2.2
+2025-11-15T19:57:07.1337560Z [1m[92m    Checking[0m anstyle-parse v0.2.6
+2025-11-15T19:57:07.2115590Z [1m[92m   Compiling[0m quote v1.0.38
+2025-11-15T19:57:07.4366130Z [1m[92m    Checking[0m colorchoice v1.0.3
+2025-11-15T19:57:07.4668290Z [1m[92m    Checking[0m anstyle-query v1.1.2
+2025-11-15T19:57:07.4768370Z [1m[92m    Checking[0m is_terminal_polyfill v1.70.1
+2025-11-15T19:57:07.5069690Z [1m[92m    Checking[0m bitflags v2.7.0
+2025-11-15T19:57:07.5171130Z [1m[92m    Checking[0m anstyle v1.0.10
+2025-11-15T19:57:07.5774000Z [1m[92m    Checking[0m scopeguard v1.1.0
+2025-11-15T19:57:07.5975530Z [1m[92m    Checking[0m anstream v0.6.18
+2025-11-15T19:57:07.6079670Z [1m[92m    Checking[0m aho-corasick v0.7.20
+2025-11-15T19:57:07.7124520Z [1m[92m   Compiling[0m syn v2.0.96
+2025-11-15T19:57:07.7553290Z [1m[92m    Checking[0m malloc_buf v0.0.6
+2025-11-15T19:57:07.9162430Z [1m[92m    Checking[0m core-foundation-sys v0.8.7
+2025-11-15T19:57:08.0367400Z [1m[92m    Checking[0m regex-syntax v0.6.28
+2025-11-15T19:57:08.4058270Z [1m[92m   Compiling[0m rayon-core v1.13.0
+2025-11-15T19:57:08.6491930Z [1m[92m   Compiling[0m getrandom v0.3.1
+2025-11-15T19:57:08.8267710Z [1m[92m   Compiling[0m rustix v1.0.1
+2025-11-15T19:57:08.9423480Z [1m[92m    Checking[0m regex v1.7.1
+2025-11-15T19:57:09.1450190Z [1m[92m    Checking[0m pxfm v0.1.23
+2025-11-15T19:57:09.5320000Z [1m[92m    Checking[0m core-foundation v0.10.1
+2025-11-15T19:57:09.7026000Z [1m[92m    Checking[0m objc v0.2.7
+2025-11-15T19:57:09.8145210Z [1m[92m    Checking[0m crossbeam-deque v0.8.2
+2025-11-15T19:57:09.8948610Z [1m[92m    Checking[0m errno v0.3.10
+2025-11-15T19:57:09.9451360Z [1m[92m    Checking[0m clap_lex v0.7.4
+2025-11-15T19:57:10.0168920Z [1m[92m   Compiling[0m anyhow v1.0.100
+2025-11-15T19:57:10.2570830Z [1m[92m    Checking[0m foreign-types-shared v0.3.1
+2025-11-15T19:57:10.3075490Z [1m[92m    Checking[0m log v0.4.28
+2025-11-15T19:57:10.3979390Z [1m[92m    Checking[0m strsim v0.11.1
+2025-11-15T19:57:10.4796040Z [1m[92m    Checking[0m clap_builder v4.5.51
+2025-11-15T19:57:11.1434400Z [1m[92m    Checking[0m moxcms v0.7.5
+2025-11-15T19:57:11.4655190Z [1m[92m   Compiling[0m foreign-types-macros v0.2.3
+2025-11-15T19:57:11.8308140Z [1m[92m    Checking[0m foreign-types v0.5.0
+2025-11-15T19:57:11.8609080Z [1m[92m    Checking[0m env_filter v0.1.3
+2025-11-15T19:57:12.5858860Z [1m[92m    Checking[0m objc_id v0.1.1
+2025-11-15T19:57:12.6087220Z [1m[92m    Checking[0m core-graphics-types v0.2.0
+2025-11-15T19:57:12.6686910Z [1m[92m    Checking[0m block v0.1.6
+2025-11-15T19:57:12.7055260Z [1m[92m    Checking[0m either v1.8.0
+2025-11-15T19:57:12.7275460Z [1m[92m    Checking[0m humantime v2.3.0
+2025-11-15T19:57:12.7714920Z [1m[92m   Compiling[0m t-rec v0.7.9 (/Users/runner/work/t-rec-rs/t-rec-rs)
+2025-11-15T19:57:12.8317180Z [1m[92m    Checking[0m fastrand v2.3.0
+2025-11-15T19:57:12.8920090Z [1m[92m    Checking[0m byteorder-lite v0.1.0
+2025-11-15T19:57:12.9323270Z [1m[92m    Checking[0m lazy_static v1.5.0
+2025-11-15T19:57:12.9732780Z [1m[92m    Checking[0m once_cell v1.20.2
+2025-11-15T19:57:13.0434640Z [1m[92m    Checking[0m bytemuck v1.13.0
+2025-11-15T19:57:13.0536200Z [1m[92m    Checking[0m tempfile v3.23.0
+2025-11-15T19:57:13.1453210Z [1m[92m    Checking[0m simplerand v1.6.0
+2025-11-15T19:57:13.1663950Z [1m[92m    Checking[0m env_logger v0.11.6
+2025-11-15T19:57:13.2230970Z [1m[92m    Checking[0m rayon v1.11.0
+2025-11-15T19:57:13.2770560Z [1m[92m    Checking[0m objc-foundation v0.1.1
+2025-11-15T19:57:13.4172950Z [1m[92m    Checking[0m core-graphics v0.25.0
+2025-11-15T19:57:13.6598610Z [1m[92m    Checking[0m clap v4.5.51
+2025-11-15T19:57:14.4300630Z [1m[92m    Checking[0m image v0.25.8
+2025-11-15T19:57:15.2062090Z [0m[1m[38;5;9merror[E0425][0m[0m[1m: cannot find value `kCGWindowListOptionIncludingWindow` in this scope[0m
+2025-11-15T19:57:15.2063340Z [0m  [0m[0m[1m[38;5;12m--> [0m[0msrc/macos/screenshot.rs:15:17[0m
+2025-11-15T19:57:15.2063980Z [0m   [0m[0m[1m[38;5;12m|[0m
+2025-11-15T19:57:15.2065410Z [0m[1m[38;5;12m15[0m[0m [0m[0m[1m[38;5;12m|[0m[0m [0m[0m                kCGWindowListOptionIncludingWindow | kCGWindowListExcludeDesktopElements,[0m
+2025-11-15T19:57:15.2066930Z [0m   [0m[0m[1m[38;5;12m|[0m[0m                 [0m[0m[1m[38;5;9m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m[0m [0m[0m[1m[38;5;9mnot found in this scope[0m
+2025-11-15T19:57:15.2067350Z [0m   [0m[0m[1m[38;5;12m|[0m
+2025-11-15T19:57:15.2067650Z [0m[1m[38;5;14mhelp[0m[0m: consider importing this constant[0m
+2025-11-15T19:57:15.2067930Z [0m   [0m[0m[1m[38;5;12m|[0m
+2025-11-15T19:57:15.2073720Z [0m [0m[0m[1m[38;5;12m1[0m[0m [0m[0m[38;5;10m+ use core_graphics::window::kCGWindowListOptionIncludingWindow;[0m
+2025-11-15T19:57:15.2074140Z [0m   [0m[0m[1m[38;5;12m|[0m
+2025-11-15T19:57:15.2074250Z 
+2025-11-15T19:57:15.2074570Z [0m[1m[38;5;9merror[E0425][0m[0m[1m: cannot find value `kCGWindowListExcludeDesktopElements` in this scope[0m
+2025-11-15T19:57:15.2075090Z [0m  [0m[0m[1m[38;5;12m--> [0m[0msrc/macos/screenshot.rs:15:54[0m
+2025-11-15T19:57:15.2075460Z [0m   [0m[0m[1m[38;5;12m|[0m
+2025-11-15T19:57:15.2075950Z [0m[1m[38;5;12m15[0m[0m [0m[0m[1m[38;5;12m|[0m[0m [0m[0m                kCGWindowListOptionIncludingWindow | kCGWindowListExcludeDesktopElements,[0m
+2025-11-15T19:57:15.2076540Z [0m   [0m[0m[1m[38;5;12m|[0m[0m                                                      [0m[0m[1m[38;5;9m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m[0m [0m[0m[1m[38;5;9mnot found in this scope[0m
+2025-11-15T19:57:15.2076910Z [0m   [0m[0m[1m[38;5;12m|[0m
+2025-11-15T19:57:15.2077200Z [0m[1m[38;5;14mhelp[0m[0m: consider importing this constant[0m
+2025-11-15T19:57:15.2077510Z [0m   [0m[0m[1m[38;5;12m|[0m
+2025-11-15T19:57:15.2078000Z [0m [0m[0m[1m[38;5;12m1[0m[0m [0m[0m[38;5;10m+ use core_graphics::window::kCGWindowListExcludeDesktopElements;[0m
+2025-11-15T19:57:15.2078440Z [0m   [0m[0m[1m[38;5;12m|[0m
+2025-11-15T19:57:15.2078550Z 
+2025-11-15T19:57:15.2079190Z [0m[1m[38;5;9merror[E0425][0m[0m[1m: cannot find value `kCGWindowImageNominalResolution` in this scope[0m
+2025-11-15T19:57:15.2079870Z [0m  [0m[0m[1m[38;5;12m--> [0m[0msrc/macos/screenshot.rs:17:17[0m
+2025-11-15T19:57:15.2080220Z [0m   [0m[0m[1m[38;5;12m|[0m
+2025-11-15T19:57:15.2080570Z [0m[1m[38;5;12m17[0m[0m [0m[0m[1m[38;5;12m|[0m[0m [0m[0m                kCGWindowImageNominalResolution[0m
+2025-11-15T19:57:15.2081030Z [0m   [0m[0m[1m[38;5;12m|[0m[0m                 [0m[0m[1m[38;5;9m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m[0m [0m[0m[1m[38;5;9mnot found in this scope[0m
+2025-11-15T19:57:15.2081370Z [0m   [0m[0m[1m[38;5;12m|[0m
+2025-11-15T19:57:15.2081690Z [0m[1m[38;5;14mhelp[0m[0m: consider importing this constant[0m
+2025-11-15T19:57:15.2082000Z [0m   [0m[0m[1m[38;5;12m|[0m
+2025-11-15T19:57:15.2082490Z [0m [0m[0m[1m[38;5;12m1[0m[0m [0m[0m[38;5;10m+ use core_graphics::window::kCGWindowImageNominalResolution;[0m
+2025-11-15T19:57:15.2082850Z [0m   [0m[0m[1m[38;5;12m|[0m
+2025-11-15T19:57:15.2083000Z 
+2025-11-15T19:57:15.2083250Z [0m[1m[38;5;9merror[E0425][0m[0m[1m: cannot find value `kCGWindowImageBoundsIgnoreFraming` in this scope[0m
+2025-11-15T19:57:15.2083830Z [0m  [0m[0m[1m[38;5;12m--> [0m[0msrc/macos/screenshot.rs:18:23[0m
+2025-11-15T19:57:15.2084120Z [0m   [0m[0m[1m[38;5;12m|[0m
+2025-11-15T19:57:15.2084470Z [0m[1m[38;5;12m18[0m[0m [0m[0m[1m[38;5;12m|[0m[0m [0m[0m                    | kCGWindowImageBoundsIgnoreFraming[0m
+2025-11-15T19:57:15.2084930Z [0m   [0m[0m[1m[38;5;12m|[0m[0m                       [0m[0m[1m[38;5;9m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m[0m [0m[0m[1m[38;5;9mnot found in this scope[0m
+2025-11-15T19:57:15.2085300Z [0m   [0m[0m[1m[38;5;12m|[0m
+2025-11-15T19:57:15.2085580Z [0m[1m[38;5;14mhelp[0m[0m: consider importing this constant[0m
+2025-11-15T19:57:15.2085870Z [0m   [0m[0m[1m[38;5;12m|[0m
+2025-11-15T19:57:15.2086340Z [0m [0m[0m[1m[38;5;12m1[0m[0m [0m[0m[38;5;10m+ use core_graphics::window::kCGWindowImageBoundsIgnoreFraming;[0m
+2025-11-15T19:57:15.2086710Z [0m   [0m[0m[1m[38;5;12m|[0m
+2025-11-15T19:57:15.2086870Z 
+2025-11-15T19:57:15.2087110Z [0m[1m[38;5;9merror[E0425][0m[0m[1m: cannot find value `kCGWindowImageShouldBeOpaque` in this scope[0m
+2025-11-15T19:57:15.2087540Z [0m  [0m[0m[1m[38;5;12m--> [0m[0msrc/macos/screenshot.rs:19:23[0m
+2025-11-15T19:57:15.2087850Z [0m   [0m[0m[1m[38;5;12m|[0m
+2025-11-15T19:57:15.2088200Z [0m[1m[38;5;12m19[0m[0m [0m[0m[1m[38;5;12m|[0m[0m [0m[0m                    | kCGWindowImageShouldBeOpaque,[0m
+2025-11-15T19:57:15.2088670Z [0m   [0m[0m[1m[38;5;12m|[0m[0m                       [0m[0m[1m[38;5;9m^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m[0m [0m[0m[1m[38;5;9mnot found in this scope[0m
+2025-11-15T19:57:15.2089040Z [0m   [0m[0m[1m[38;5;12m|[0m
+2025-11-15T19:57:15.2089320Z [0m[1m[38;5;14mhelp[0m[0m: consider importing this constant[0m
+2025-11-15T19:57:15.2089610Z [0m   [0m[0m[1m[38;5;12m|[0m
+2025-11-15T19:57:15.2090000Z [0m [0m[0m[1m[38;5;12m1[0m[0m [0m[0m[38;5;10m+ use core_graphics::window::kCGWindowImageShouldBeOpaque;[0m
+2025-11-15T19:57:15.2090420Z [0m   [0m[0m[1m[38;5;12m|[0m
+2025-11-15T19:57:15.2090530Z 
+2025-11-15T19:57:15.2090830Z [0m[1m[38;5;9merror[E0425][0m[0m[1m: cannot find value `kCGWindowListOptionIncludingWindow` in this scope[0m
+2025-11-15T19:57:15.2091290Z [0m  [0m[0m[1m[38;5;12m--> [0m[0msrc/macos/window_id.rs:35:13[0m
+2025-11-15T19:57:15.2091680Z [0m   [0m[0m[1m[38;5;12m|[0m
+2025-11-15T19:57:15.2092060Z [0m[1m[38;5;12m35[0m[0m [0m[0m[1m[38;5;12m|[0m[0m [0m[0m            kCGWindowListOptionIncludingWindow[0m
+2025-11-15T19:57:15.2092590Z [0m   [0m[0m[1m[38;5;12m|[0m[0m             [0m[0m[1m[38;5;9m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m[0m [0m[0m[1m[38;5;9mnot found in this scope[0m
+2025-11-15T19:57:15.2092970Z [0m   [0m[0m[1m[38;5;12m|[0m
+2025-11-15T19:57:15.2093500Z [0m[1m[38;5;14mhelp[0m[0m: consider importing this constant[0m
+2025-11-15T19:57:15.2093800Z [0m   [0m[0m[1m[38;5;12m|[0m
+2025-11-15T19:57:15.2094350Z [0m [0m[0m[1m[38;5;12m1[0m[0m [0m[0m[38;5;10m+ use core_graphics::window::kCGWindowListOptionIncludingWindow;[0m
+2025-11-15T19:57:15.2094800Z [0m   [0m[0m[1m[38;5;12m|[0m
+2025-11-15T19:57:15.2094910Z 
+2025-11-15T19:57:15.2095260Z [0m[1m[38;5;9merror[E0425][0m[0m[1m: cannot find value `kCGWindowListOptionOnScreenOnly` in this scope[0m
+2025-11-15T19:57:15.2095710Z [0m  [0m[0m[1m[38;5;12m--> [0m[0msrc/macos/window_id.rs:36:19[0m
+2025-11-15T19:57:15.2096170Z [0m   [0m[0m[1m[38;5;12m|[0m
+2025-11-15T19:57:15.2096540Z [0m[1m[38;5;12m36[0m[0m [0m[0m[1m[38;5;12m|[0m[0m [0m[0m                | kCGWindowListOptionOnScreenOnly[0m
+2025-11-15T19:57:15.2097010Z [0m   [0m[0m[1m[38;5;12m|[0m[0m                   [0m[0m[1m[38;5;9m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m[0m [0m[0m[1m[38;5;9mnot found in this scope[0m
+2025-11-15T19:57:15.2097390Z [0m   [0m[0m[1m[38;5;12m|[0m
+2025-11-15T19:57:15.2097760Z [0m[1m[38;5;14mhelp[0m[0m: consider importing this constant[0m
+2025-11-15T19:57:15.2098060Z [0m   [0m[0m[1m[38;5;12m|[0m
+2025-11-15T19:57:15.2098480Z [0m [0m[0m[1m[38;5;12m1[0m[0m [0m[0m[38;5;10m+ use core_graphics::window::kCGWindowListOptionOnScreenOnly;[0m
+2025-11-15T19:57:15.2098900Z [0m   [0m[0m[1m[38;5;12m|[0m
+2025-11-15T19:57:15.2099000Z 
+2025-11-15T19:57:15.2099320Z [0m[1m[38;5;9merror[E0425][0m[0m[1m: cannot find value `kCGWindowListExcludeDesktopElements` in this scope[0m
+2025-11-15T19:57:15.2099750Z [0m  [0m[0m[1m[38;5;12m--> [0m[0msrc/macos/window_id.rs:37:19[0m
+2025-11-15T19:57:15.2100060Z [0m   [0m[0m[1m[38;5;12m|[0m
+2025-11-15T19:57:15.2100400Z [0m[1m[38;5;12m37[0m[0m [0m[0m[1m[38;5;12m|[0m[0m [0m[0m                | kCGWindowListExcludeDesktopElements,[0m
+2025-11-15T19:57:15.2100880Z [0m   [0m[0m[1m[38;5;12m|[0m[0m                   [0m[0m[1m[38;5;9m^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^[0m[0m [0m[0m[1m[38;5;9mnot found in this scope[0m
+2025-11-15T19:57:15.2101230Z [0m   [0m[0m[1m[38;5;12m|[0m
+2025-11-15T19:57:15.2101600Z [0m[1m[38;5;14mhelp[0m[0m: consider importing this constant[0m
+2025-11-15T19:57:15.2101950Z [0m   [0m[0m[1m[38;5;12m|[0m
+2025-11-15T19:57:15.2102380Z [0m [0m[0m[1m[38;5;12m1[0m[0m [0m[0m[38;5;10m+ use core_graphics::window::kCGWindowListExcludeDesktopElements;[0m
+2025-11-15T19:57:15.2102820Z [0m   [0m[0m[1m[38;5;12m|[0m
+2025-11-15T19:57:15.2102930Z 
+2025-11-15T19:57:15.2103170Z [0m[1m[38;5;9merror[E0425][0m[0m[1m: cannot find value `kCGNullWindowID` in this scope[0m
+2025-11-15T19:57:15.2103590Z [0m  [0m[0m[1m[38;5;12m--> [0m[0msrc/macos/window_id.rs:38:13[0m
+2025-11-15T19:57:15.2103860Z [0m   [0m[0m[1m[38;5;12m|[0m
+2025-11-15T19:57:15.2104290Z [0m[1m[38;5;12m38[0m[0m [0m[0m[1m[38;5;12m|[0m[0m [0m[0m            kCGNullWindowID,[0m
+2025-11-15T19:57:15.2104740Z [0m   [0m[0m[1m[38;5;12m|[0m[0m             [0m[0m[1m[38;5;9m^^^^^^^^^^^^^^^[0m[0m [0m[0m[1m[38;5;9mnot found in this scope[0m
+2025-11-15T19:57:15.2105050Z [0m   [0m[0m[1m[38;5;12m|[0m
+2025-11-15T19:57:15.2105410Z [0m[1m[38;5;14mhelp[0m[0m: consider importing this constant[0m
+2025-11-15T19:57:15.2105690Z [0m   [0m[0m[1m[38;5;12m|[0m
+2025-11-15T19:57:15.2106170Z [0m [0m[0m[1m[38;5;12m1[0m[0m [0m[0m[38;5;10m+ use core_graphics::window::kCGNullWindowID;[0m
+2025-11-15T19:57:15.2106520Z [0m   [0m[0m[1m[38;5;12m|[0m
+2025-11-15T19:57:15.2106670Z 
+2025-11-15T19:57:15.2670500Z [0m[1mFor more information about this error, try `rustc --explain E0425`.[0m
+2025-11-15T19:57:15.2700210Z [1m[91merror[0m: could not compile `t-rec` (bin "t-rec") due to 9 previous errors
+2025-11-15T19:57:15.3030280Z ##[error]Process completed with exit code 101.
+2025-11-15T19:57:15.3129300Z Post job cleanup.
+2025-11-15T19:57:15.4456830Z [command]/opt/homebrew/bin/git version
+2025-11-15T19:57:15.4524200Z git version 2.50.1
+2025-11-15T19:57:15.4546210Z Copying '/Users/runner/.gitconfig' to '/Users/runner/work/_temp/79260fe4-bb7e-47f4-97ad-bd163a38ccee/.gitconfig'
+2025-11-15T19:57:15.4552940Z Temporarily overriding HOME='/Users/runner/work/_temp/79260fe4-bb7e-47f4-97ad-bd163a38ccee' before making global git config changes
+2025-11-15T19:57:15.4553510Z Adding repository directory to the temporary git global config as a safe directory
+2025-11-15T19:57:15.4556710Z [command]/opt/homebrew/bin/git config --global --add safe.directory /Users/runner/work/t-rec-rs/t-rec-rs
+2025-11-15T19:57:15.4616790Z [command]/opt/homebrew/bin/git config --local --name-only --get-regexp core\.sshCommand
+2025-11-15T19:57:15.4670030Z [command]/opt/homebrew/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2025-11-15T19:57:15.5359040Z [command]/opt/homebrew/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2025-11-15T19:57:15.5412310Z http.https://github.com/.extraheader
+2025-11-15T19:57:15.5421040Z [command]/opt/homebrew/bin/git config --local --unset-all http.https://github.com/.extraheader
+2025-11-15T19:57:15.5480510Z [command]/opt/homebrew/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2025-11-15T19:57:15.6184800Z Cleaning up orphan processes
