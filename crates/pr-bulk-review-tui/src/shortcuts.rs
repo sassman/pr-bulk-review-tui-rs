@@ -43,6 +43,8 @@ pub enum Action {
     // Log panel - step and error navigation
     NextStep,
     PrevStep,
+    NextError,        // Jump to next step/job with errors
+    PrevError,        // Jump to previous step/job with errors
     NextLogSection,   // Error navigation (kept for backwards compat)
     PrevLogSection,   // Error navigation (kept for backwards compat)
     ToggleTimestamps,
@@ -332,7 +334,7 @@ pub fn get_shortcuts() -> Vec<ShortcutCategory> {
             shortcuts: vec![
                 Shortcut {
                     key_display: "↑/↓ or j/k",
-                    description: "Scroll vertically",
+                    description: "Navigate through tree (jobs/steps/logs)",
                     action: Action::NavigateToNextPr, // Reused
                     matcher: ShortcutMatcher::SingleKey(|key| {
                         matches!(
@@ -342,30 +344,46 @@ pub fn get_shortcuts() -> Vec<ShortcutCategory> {
                     }),
                 },
                 Shortcut {
-                    key_display: "←/→ or h",
+                    key_display: "Space",
+                    description: "Page down (scroll by screen height)",
+                    action: Action::PageLogPanelDown,
+                    matcher: ShortcutMatcher::SingleKey(|key| {
+                        matches!(key.code, KeyCode::Char(' '))
+                    }),
+                },
+                Shortcut {
+                    key_display: "←/→ or h/l",
                     description: "Scroll horizontally",
                     action: Action::ScrollLogPanelLeft, // Represents both
                     matcher: ShortcutMatcher::SingleKey(|key| {
                         matches!(
                             key.code,
-                            KeyCode::Char('h') | KeyCode::Left | KeyCode::Right
+                            KeyCode::Char('h') | KeyCode::Left | KeyCode::Right | KeyCode::Char('l')
                         )
                     }),
                 },
                 Shortcut {
                     key_display: "n",
-                    description: "Jump to next error",
-                    action: Action::NextLogSection,
+                    description: "Jump to next failed step/job",
+                    action: Action::NextError,
                     matcher: ShortcutMatcher::SingleKey(|key| {
                         matches!(key.code, KeyCode::Char('n'))
                     }),
                 },
                 Shortcut {
                     key_display: "p",
-                    description: "Jump to previous error",
-                    action: Action::PrevLogSection,
+                    description: "Jump to previous failed step/job",
+                    action: Action::PrevError,
                     matcher: ShortcutMatcher::SingleKey(|key| {
                         matches!(key.code, KeyCode::Char('p'))
+                    }),
+                },
+                Shortcut {
+                    key_display: "Enter",
+                    description: "Expand/collapse tree node",
+                    action: Action::ToggleTreeNode,
+                    matcher: ShortcutMatcher::SingleKey(|key| {
+                        matches!(key.code, KeyCode::Enter)
                     }),
                 },
                 Shortcut {

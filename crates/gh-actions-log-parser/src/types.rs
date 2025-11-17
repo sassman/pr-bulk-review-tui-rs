@@ -45,6 +45,9 @@ pub struct LogLine {
     /// True if this line is pure metadata that should be hidden in normal view
     /// (e.g., ##[endgroup] with no message, empty lines with commands)
     pub is_metadata: bool,
+
+    /// True if this line is a command invocation (had [command] prefix)
+    pub is_command: bool,
 }
 
 /// A segment of text with preserved ANSI styling
@@ -226,6 +229,7 @@ impl LogLine {
             group_level: 0,
             group_title: None,
             is_metadata: false,
+            is_command: false,
         }
     }
 

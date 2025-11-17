@@ -1164,6 +1164,17 @@ fn log_panel_reducer(mut state: LogPanelState, action: &Action) -> (LogPanelStat
                 panel.navigate_up();
             }
         }
+        // Error navigation
+        Action::NextError => {
+            if let Some(ref mut panel) = state.panel {
+                panel.find_next_error();
+            }
+        }
+        Action::PrevError => {
+            if let Some(ref mut panel) = state.panel {
+                panel.find_prev_error();
+            }
+        }
         _ => {}
     }
 

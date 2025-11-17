@@ -1449,39 +1449,27 @@ fn handle_key_event(
             KeyCode::Char('k') | KeyCode::Up => {
                 return Action::SelectPrevJob; // Navigates up in tree
             }
-            // Page down (space) - only in log viewer
+            // Page down (space)
             KeyCode::Char(' ') => {
-                if !job_list_focused {
-                    return Action::PageLogPanelDown;
-                }
+                return Action::PageLogPanelDown;
             }
-            // Horizontal scrolling (h/l or left/right) - only in log viewer
+            // Horizontal scrolling (h/l or left/right)
             KeyCode::Char('h') | KeyCode::Left => {
-                if !job_list_focused {
-                    return Action::ScrollLogPanelLeft;
-                }
+                return Action::ScrollLogPanelLeft;
             }
             KeyCode::Char('l') | KeyCode::Right => {
-                if !job_list_focused {
-                    return Action::ScrollLogPanelRight;
-                }
+                return Action::ScrollLogPanelRight;
             }
-            // Step navigation (n/p) - only in log viewer
+            // Error navigation (n/p) - jump to next/previous error
             KeyCode::Char('n') => {
-                if !job_list_focused {
-                    return Action::NextStep;
-                }
+                return Action::NextError;
             }
             KeyCode::Char('p') => {
-                if !job_list_focused {
-                    return Action::PrevStep;
-                }
+                return Action::PrevError;
             }
-            // Toggle timestamps - only in log viewer
+            // Toggle timestamps
             KeyCode::Char('t') => {
-                if !job_list_focused {
-                    return Action::ToggleTimestamps;
-                }
+                return Action::ToggleTimestamps;
             }
             // Enter: Toggle tree node expand/collapse
             KeyCode::Enter => {

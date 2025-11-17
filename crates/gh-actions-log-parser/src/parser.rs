@@ -105,8 +105,15 @@ fn parse_job_log(job_name: &str, content: &str) -> JobLog {
         // Extract timestamp if present (GitHub Actions format)
         let (timestamp, line_content) = extract_timestamp(raw_line);
 
+        // Check for [command] prefix and remove it
+        let (is_command, line_after_command_prefix) = if line_content.starts_with("[command]") {
+            (true, &line_content[9..]) // Remove "[command]" prefix
+        } else {
+            (false, line_content)
+        };
+
         // Parse ANSI codes to get styled segments
-        let styled_segments = parse_ansi_line(line_content);
+        let styled_segments = parse_ansi_line(line_after_command_prefix);
 
         // Get plain text for command parsing (without ANSI)
         let plain_text: String = styled_segments
@@ -130,6 +137,7 @@ fn parse_job_log(job_name: &str, content: &str) -> JobLog {
 
                 // Determine if this is pure metadata (should be hidden)
                 let is_metadata = match &cmd {
+                    WorkflowCommand::GroupStart { .. } => true, // Hide ##[group] lines
                     WorkflowCommand::GroupEnd => cleaned_msg.is_empty(),
                     WorkflowCommand::Debug { message } if message.is_empty() => true,
                     _ => false,
@@ -153,6 +161,7 @@ fn parse_job_log(job_name: &str, content: &str) -> JobLog {
             group_level,
             group_title,
             is_metadata,
+            is_command,
         });
     }
 
@@ -169,7 +178,8 @@ pub fn job_log_to_tree(job_log: JobLog) -> crate::types::JobNode {
     let mut current_step_name: Option<String> = None;
 
     for line in job_log.lines {
-        // Check for step boundaries
+        // Check for step boundaries - only GroupStart creates a new step
+        // GroupEnd is just metadata, actual content continues after it
         if let Some(ref cmd) = line.command {
             match cmd {
                 WorkflowCommand::GroupStart { title } => {
@@ -187,23 +197,12 @@ pub fn job_log_to_tree(job_log: JobLog) -> crate::types::JobNode {
                     // Start new step
                     current_step_name = Some(title.clone());
                 }
-                WorkflowCommand::GroupEnd => {
-                    // End current step
-                    if let Some(step_name) = current_step_name.take() {
-                        let error_count = count_step_errors(&current_step_lines);
-                        steps.push(crate::types::StepNode {
-                            name: step_name,
-                            lines: current_step_lines.clone(),
-                            error_count,
-                        });
-                        current_step_lines.clear();
-                    }
-                }
                 _ => {}
             }
         }
 
         // Add non-metadata lines to current step
+        // This includes all lines AFTER ##[endgroup] until next ##[group]
         if !line.is_metadata {
             current_step_lines.push(line);
         }

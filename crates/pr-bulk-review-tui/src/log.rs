@@ -466,9 +466,12 @@ fn build_tree_row(panel: &LogPanel, path: &[usize], theme: &crate::theme::Theme)
                 line.display_content.to_lowercase().contains("error:")
             };
 
-            // Apply error styling if needed
+            // Determine line style based on type
             let line_style = if is_error {
                 Style::default().fg(theme.status_error).add_modifier(Modifier::BOLD).bg(theme.bg_panel)
+            } else if line.is_command {
+                // Style command invocations in yellow
+                Style::default().fg(Color::Yellow).bg(theme.bg_panel)
             } else {
                 base_style
             };
@@ -920,20 +923,76 @@ impl LogPanel {
     }
 
     /// Find next error across entire tree
+    /// If in a step, first navigate through error lines within the step
     pub fn find_next_error(&mut self) {
-        // Collect all paths with errors
+        // Check if we're in a step (path length 3) or at a log line (path length 4)
+        if self.cursor_path.len() >= 3 {
+            // Try to find next error line in current step
+            let step_path = &self.cursor_path[0..3]; // [workflow, job, step]
+
+            // Get the step to check for error lines
+            if let Some(workflow) = self.workflows.get(step_path[0]) {
+                if let Some(job) = workflow.jobs.get(step_path[1]) {
+                    if let Some(step) = job.steps.get(step_path[2]) {
+                        // Check if step is expanded (has visible lines)
+                        if self.is_expanded(step_path) {
+                            let start_line_idx = if self.cursor_path.len() == 4 {
+                                self.cursor_path[3] + 1 // Start after current line
+                            } else {
+                                0 // Start from first line if at step level
+                            };
+
+                            // Find next error line in this step
+                            for (line_idx, line) in step.lines.iter().enumerate().skip(start_line_idx) {
+                                let is_error = if let Some(ref cmd) = line.command {
+                                    matches!(cmd, gh_actions_log_parser::WorkflowCommand::Error { .. })
+                                } else {
+                                    line.display_content.to_lowercase().contains("error:")
+                                };
+
+                                if is_error {
+                                    // Found error line in current step
+                                    let new_path = vec![step_path[0], step_path[1], step_path[2], line_idx];
+                                    let visible = self.flatten_visible_nodes();
+                                    if let Some(idx) = visible.iter().position(|path| path == &new_path) {
+                                        self.cursor_path = new_path;
+                                        // Auto-scroll to keep cursor visible
+                                        let max_visible_idx = self.scroll_offset + self.viewport_height.saturating_sub(1);
+                                        if idx > max_visible_idx {
+                                            self.scroll_offset = idx.saturating_sub(self.viewport_height.saturating_sub(1));
+                                        } else if idx < self.scroll_offset {
+                                            self.scroll_offset = idx;
+                                        }
+                                    }
+                                    return;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // No more error lines in current step, jump to next step/job with errors
         let error_paths = self.collect_error_paths();
         if error_paths.is_empty() {
             return;
         }
 
-        // Find next error after current cursor
+        // Find next error step/job after current cursor
         let visible = self.flatten_visible_nodes();
         if let Some(current_idx) = visible.iter().position(|path| path == &self.cursor_path) {
             // Look for next error path after current position
-            for path in visible.iter().skip(current_idx + 1) {
+            for (idx, path) in visible.iter().enumerate().skip(current_idx + 1) {
                 if error_paths.contains(path) {
                     self.cursor_path = path.clone();
+                    // Auto-scroll to keep cursor visible
+                    let max_visible_idx = self.scroll_offset + self.viewport_height.saturating_sub(1);
+                    if idx > max_visible_idx {
+                        self.scroll_offset = idx.saturating_sub(self.viewport_height.saturating_sub(1));
+                    } else if idx < self.scroll_offset {
+                        self.scroll_offset = idx;
+                    }
                     return;
                 }
             }
@@ -941,7 +1000,102 @@ impl LogPanel {
 
         // Wrap to first error
         if let Some(first_error) = error_paths.first() {
-            self.cursor_path = first_error.clone();
+            if let Some(idx) = visible.iter().position(|path| path == first_error) {
+                self.cursor_path = first_error.clone();
+                // Auto-scroll to top when wrapping
+                self.scroll_offset = idx;
+            }
+        }
+    }
+
+    /// Find previous error across entire tree
+    /// If in a step, first navigate through error lines within the step (backwards)
+    pub fn find_prev_error(&mut self) {
+        // Check if we're in a step (path length 3) or at a log line (path length 4)
+        if self.cursor_path.len() >= 3 {
+            // Try to find previous error line in current step
+            let step_path = &self.cursor_path[0..3]; // [workflow, job, step]
+
+            // Get the step to check for error lines
+            if let Some(workflow) = self.workflows.get(step_path[0]) {
+                if let Some(job) = workflow.jobs.get(step_path[1]) {
+                    if let Some(step) = job.steps.get(step_path[2]) {
+                        // Check if step is expanded (has visible lines)
+                        if self.is_expanded(step_path) {
+                            let end_line_idx = if self.cursor_path.len() == 4 {
+                                self.cursor_path[3] // Current line (exclusive)
+                            } else {
+                                step.lines.len() // All lines if at step level
+                            };
+
+                            // Find previous error line in this step (iterate backwards)
+                            for (line_idx, line) in step.lines.iter().enumerate().take(end_line_idx).rev() {
+                                let is_error = if let Some(ref cmd) = line.command {
+                                    matches!(cmd, gh_actions_log_parser::WorkflowCommand::Error { .. })
+                                } else {
+                                    line.display_content.to_lowercase().contains("error:")
+                                };
+
+                                if is_error {
+                                    // Found error line in current step
+                                    let new_path = vec![step_path[0], step_path[1], step_path[2], line_idx];
+                                    let visible = self.flatten_visible_nodes();
+                                    if let Some(idx) = visible.iter().position(|path| path == &new_path) {
+                                        self.cursor_path = new_path;
+                                        // Auto-scroll to keep cursor visible
+                                        let max_visible_idx = self.scroll_offset + self.viewport_height.saturating_sub(1);
+                                        if idx > max_visible_idx {
+                                            self.scroll_offset = idx.saturating_sub(self.viewport_height.saturating_sub(1));
+                                        } else if idx < self.scroll_offset {
+                                            self.scroll_offset = idx;
+                                        }
+                                    }
+                                    return;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // No more error lines in current step, jump to previous step/job with errors
+        let error_paths = self.collect_error_paths();
+        if error_paths.is_empty() {
+            return;
+        }
+
+        // Find previous error before current cursor
+        let visible = self.flatten_visible_nodes();
+        if let Some(current_idx) = visible.iter().position(|path| path == &self.cursor_path) {
+            // Look for previous error path before current position (iterate backwards)
+            for (idx, path) in visible.iter().enumerate().take(current_idx).rev() {
+                if error_paths.contains(&path) {
+                    self.cursor_path = path.clone();
+                    // Auto-scroll to keep cursor visible
+                    let max_visible_idx = self.scroll_offset + self.viewport_height.saturating_sub(1);
+                    if idx > max_visible_idx {
+                        self.scroll_offset = idx.saturating_sub(self.viewport_height.saturating_sub(1));
+                    } else if idx < self.scroll_offset {
+                        self.scroll_offset = idx;
+                    }
+                    return;
+                }
+            }
+        }
+
+        // Wrap to last error
+        if let Some(last_error) = error_paths.last() {
+            if let Some(idx) = visible.iter().position(|path| path == last_error) {
+                self.cursor_path = last_error.clone();
+                // Auto-scroll when wrapping
+                let max_visible_idx = self.scroll_offset + self.viewport_height.saturating_sub(1);
+                if idx > max_visible_idx {
+                    self.scroll_offset = idx.saturating_sub(self.viewport_height.saturating_sub(1));
+                } else if idx < self.scroll_offset {
+                    self.scroll_offset = idx;
+                }
+            }
         }
     }
 
