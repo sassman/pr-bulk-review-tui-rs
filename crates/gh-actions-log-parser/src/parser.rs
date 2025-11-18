@@ -253,9 +253,9 @@ fn count_step_errors(lines: &[LogLine]) -> usize {
 /// Returns (timestamp, content) where timestamp is Some if found, None otherwise.
 fn extract_timestamp(line: &str) -> (Option<String>, &str) {
     // Check if line starts with ISO 8601 timestamp
-    if line.len() > 30 {
+    if line.len() >= 28 {  // Minimum length for timestamp: "2024-01-15T10:30:00.123456Z"
         let chars: Vec<char> = line.chars().collect();
-        if chars.len() > 30
+        if chars.len() >= 28
             && chars[4] == '-'
             && chars[7] == '-'
             && chars[10] == 'T'
@@ -263,11 +263,20 @@ fn extract_timestamp(line: &str) -> (Option<String>, &str) {
             && chars[16] == ':'
             && (chars[19] == '.' || chars[19] == 'Z')
         {
-            // Find where timestamp ends (look for 'Z' followed by space)
+            // Find where timestamp ends
             if let Some(pos) = line.find("Z ") {
+                // 'Z' followed by space (normal case)
                 let timestamp = line[..=pos].to_string(); // Include the 'Z'
                 let content = &line[pos + 2..]; // Skip "Z " to get content
                 return (Some(timestamp), content);
+            } else if let Some(pos) = line.find('Z') {
+                // 'Z' at end of line (empty line case)
+                // Verify this is actually the timestamp 'Z' by checking position
+                if pos >= 20 && pos < 30 {  // 'Z' should be around position 20-29 in timestamp
+                    let timestamp = line[..=pos].to_string(); // Include the 'Z'
+                    let content = &line[pos + 1..]; // Everything after 'Z' (should be empty or whitespace)
+                    return (Some(timestamp), content);
+                }
             }
         }
     }
@@ -320,6 +329,24 @@ mod tests {
         let (ts, content) = extract_timestamp(line);
         assert_eq!(ts, None);
         assert_eq!(content, "Just a regular log line");
+    }
+
+    #[test]
+    fn test_extract_timestamp_empty_line() {
+        // Test timestamp at end of line with no content (empty line case)
+        let line = "2025-11-15T19:57:15.2102930Z";
+        let (ts, content) = extract_timestamp(line);
+        assert_eq!(ts, Some("2025-11-15T19:57:15.2102930Z".to_string()));
+        assert_eq!(content, "");
+    }
+
+    #[test]
+    fn test_extract_timestamp_with_trailing_whitespace() {
+        // Test timestamp followed by whitespace only
+        let line = "2025-11-15T19:57:15.2102930Z   ";
+        let (ts, content) = extract_timestamp(line);
+        assert_eq!(ts, Some("2025-11-15T19:57:15.2102930Z".to_string()));
+        assert_eq!(content, "  "); // Two spaces after the Z
     }
 
     #[test]

@@ -51,47 +51,6 @@ pub struct JobMetadata {
     pub html_url: String,       // GitHub URL to job
 }
 
-/// Represents a single line in the log with metadata
-#[derive(Debug, Clone)]
-pub struct LogLine {
-    pub content: String,
-    pub timestamp: String,
-    /// True if this line is part of an error section
-    pub is_error: bool,
-    pub is_warning: bool,
-    pub is_header: bool,
-    pub error_level: ErrorLevel,
-    /// The build step this line belongs to (for context)
-    pub step_name: String,
-    /// True if this line starts an error section (contains "error:")
-    pub is_error_start: bool,
-    /// Styled segments from ANSI parsing (if available from new parser)
-    pub styled_segments: Vec<gh_actions_log_parser::StyledSegment>,
-    /// Workflow command if this line contains one
-    pub command: Option<gh_actions_log_parser::WorkflowCommand>,
-    /// Group nesting level (0 = not in group)
-    pub group_level: usize,
-    /// Title of containing group
-    pub group_title: Option<String>,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub enum ErrorLevel {
-    None,
-    Warning,
-    Error,
-    Critical,
-}
-
-/// UI state for a tree node (expanded/collapsed)
-#[derive(Debug, Clone)]
-pub struct TreeNodeState {
-    /// Path to this node: [workflow_idx, job_idx, step_idx]
-    pub path: Vec<usize>,
-    /// Is this node expanded?
-    pub expanded: bool,
-}
-
 #[derive(Debug, Clone)]
 pub struct LogPanel {
     /// Tree data from parser (WorkflowNode contains JobNode contains StepNode)
@@ -128,108 +87,6 @@ pub struct PrContext {
     pub number: usize,
     pub title: String,
     pub author: String,
-}
-
-/// Legacy structure for backward compatibility with task.rs
-#[derive(Debug, Clone)]
-pub struct LogSection {
-    pub step_name: String,
-    pub error_lines: Vec<String>,
-    pub has_extracted_errors: bool,
-}
-
-/// Extract error context from build logs
-/// Returns lines around errors (±5 lines before and after)
-/// Returns empty vector if no meaningful errors found (user will see full log instead)
-pub fn extract_error_context(log_text: &str, _step_name: &str) -> Vec<String> {
-    let lines: Vec<&str> = log_text.lines().collect();
-    let mut error_indices = Vec::new();
-
-    // Find lines that contain error indicators
-    // Prioritize lines that START with "error" for build/compilation errors
-    for (idx, line) in lines.iter().enumerate() {
-        let trimmed = line.trim();
-        let lower = trimmed.to_lowercase();
-
-        // Skip lines that are clearly not errors (comments)
-        if lower.starts_with("# error") || lower.starts_with("// error") {
-            continue;
-        }
-
-        // PRIORITY 1: Lines that start with "error" (typical build errors)
-        if lower.starts_with("error:")
-            || lower.starts_with("error[")
-            || lower.starts_with("error ")
-        {
-            error_indices.push(idx);
-            continue;
-        }
-
-        // PRIORITY 2: Lines that start with other error indicators
-        if lower.starts_with("failed:")
-            || lower.starts_with("failure:")
-            || lower.starts_with("fatal:")
-        {
-            error_indices.push(idx);
-            continue;
-        }
-
-        // PRIORITY 3: Lines containing error in context (less reliable)
-        if lower.contains("error:")
-            || lower.contains("failed:")
-            || lower.contains("✗")
-            || lower.contains("❌")
-            || (lower.contains("error") && (lower.contains("line") || lower.contains("at ")))
-        {
-            error_indices.push(idx);
-        }
-    }
-
-    // Only return error context if we found at least 2 error lines
-    if error_indices.len() < 2 {
-        return Vec::new();
-    }
-
-    // For each error, extract context (±5 lines)
-    let mut result = Vec::new();
-    let mut covered_ranges = Vec::new();
-
-    for (idx, &error_idx) in error_indices.iter().enumerate() {
-        let start = error_idx.saturating_sub(5);
-        let end = (error_idx + 10).min(lines.len()); // Keep 10 lines after for context
-
-        // Check if this range overlaps with already covered ranges
-        let mut should_add = true;
-        for &(covered_start, covered_end) in &covered_ranges {
-            if start <= covered_end && end >= covered_start {
-                should_add = false;
-                break;
-            }
-        }
-
-        if should_add {
-            covered_ranges.push((start, end));
-
-            // Add skip indicator if we're not at the beginning and this is the first error
-            if idx == 0 && start > 0 {
-                result.push(format!("... [skipped {} lines] ...", start));
-                result.push("".to_string());
-            }
-
-            for line in lines.iter().take(end).skip(start) {
-                result.push(line.to_string());
-            }
-
-            // Add separator between different error contexts
-            if idx < error_indices.len() - 1 {
-                result.push("".to_string());
-                result.push("─".repeat(80));
-                result.push("".to_string());
-            }
-        }
-    }
-
-    result
 }
 
 /// Render the log panel as a card overlay with PR context header
@@ -492,6 +349,17 @@ fn build_tree_row(panel: &LogPanel, path: &[usize], theme: &crate::theme::Theme)
             // Add tree indentation prefix
             let prefix = format!("{}│     ", indent);
             let mut spans = vec![Span::styled(prefix, Style::default().fg(theme.text_muted).bg(theme.bg_panel))];
+
+            // Add timestamp if enabled and available
+            if panel.show_timestamps {
+                if let Some(ref timestamp) = line.timestamp {
+                    spans.push(Span::styled(
+                        format!("[{}] ", timestamp),
+                        Style::default().fg(theme.text_muted).bg(theme.bg_panel),
+                    ));
+                }
+            }
+
             spans.extend(content.spans);
             Line::from(spans)
         }
@@ -595,145 +463,8 @@ fn styled_segments_to_line(segments: &[StyledSegment], base_style: Style, h_scro
     Line::from(spans)
 }
 
-/// Extract timestamp from log line if present
-/// Returns (timestamp, content) tuple
-fn extract_timestamp(line: &str) -> (String, String) {
-    // GitHub Actions logs format: "2024-01-15T10:30:00.1234567Z some log line"
-    if line.len() > 30 {
-        let chars: Vec<char> = line.chars().collect();
-        if chars.len() > 30
-            && chars[4] == '-'
-            && chars[7] == '-'
-            && chars[10] == 'T'
-            && chars[13] == ':'
-            && chars[16] == ':'
-            && (chars[19] == '.' || chars[19] == 'Z')
-        {
-            // Find where timestamp ends (look for 'Z' followed by space)
-            if let Some(pos) = line.find("Z ") {
-                let timestamp = line[..pos + 1].to_string(); // Include the 'Z'
-                let content = line[pos + 2..].to_string(); // Skip "Z " to get content
-                return (timestamp, content);
-            }
-        }
-    }
-    // No timestamp found
-    (String::new(), line.to_string())
-}
-
-// /// Convert legacy LogSections into unified LogPanel format
-// /// This flattens all sections into a single view with error highlighting
-// /// Error sections start with "error:" and end with an empty line
-// pub fn create_log_panel_from_sections(
-//     log_sections: Vec<LogSection>,
-//     pr_context: PrContext,
-// ) -> LogPanel {
-//     let mut lines = Vec::new();
-//     let mut error_indices = Vec::new();
-// 
-//     for (section_idx, section) in log_sections.iter().enumerate() {
-//         let step_name = section.step_name.clone();
-// 
-//         // Add section header
-//         let header = format!("━━━ {} ━━━", step_name);
-//         lines.push(LogLine {
-//             content: header,
-//             timestamp: String::new(),
-//             is_error: false,
-//             is_warning: false,
-//             is_header: true,
-//             error_level: ErrorLevel::None,
-//             step_name: step_name.clone(),
-//             is_error_start: false,
-//             styled_segments: Vec::new(),
-//             command: None,
-//             group_level: 0,
-//             group_title: None,
-//         });
-// 
-//         // Track if we're inside an error section
-//         let mut in_error_section = false;
-// 
-//         // Add all lines from this section
-//         for line in &section.error_lines {
-//             let (timestamp, content) = extract_timestamp(line);
-//             let content_lower = content.to_lowercase();
-// 
-//             // Check if this line starts an error section
-//             let starts_error = content_lower.contains("error:");
-// 
-//             // Check if this is an empty line (ends error section)
-//             let is_empty = content.trim().is_empty();
-// 
-//             // State machine for error sections
-//             if starts_error && !in_error_section {
-//                 // Start of new error section
-//                 in_error_section = true;
-//                 error_indices.push(lines.len()); // Store start index of error section
-//             }
-// 
-//             let is_in_error_section = in_error_section;
-// 
-//             // Add the line
-//             lines.push(LogLine {
-//                 content,
-//                 timestamp,
-//                 is_error: is_in_error_section,
-//                 is_warning: false,
-//                 is_header: false,
-//                 error_level: if is_in_error_section { ErrorLevel::Error } else { ErrorLevel::None },
-//                 step_name: step_name.clone(),
-//                 is_error_start: starts_error,
-//                 styled_segments: Vec::new(),
-//                 command: None,
-//                 group_level: 0,
-//                 group_title: None,
-//             });
-// 
-//             // End error section on empty line
-//             if is_empty && in_error_section {
-//                 in_error_section = false;
-//             }
-//         }
-// 
-//         // Add separator between sections (except after last section)
-//         if section_idx < log_sections.len() - 1 {
-//             lines.push(LogLine {
-//                 content: "─".repeat(80),
-//                 timestamp: String::new(),
-//                 is_error: false,
-//                 is_warning: false,
-//                 is_header: false,
-//                 error_level: ErrorLevel::None,
-//                 step_name: step_name.clone(),
-//                 is_error_start: false,
-//                 styled_segments: Vec::new(),
-//                 command: None,
-//                 group_level: 0,
-//                 group_title: None,
-//             });
-//         }
-//     }
-// 
-//     LogPanel {
-//         jobs: Vec::new(), // Legacy path - no jobs
-//         selected_job_idx: 0,
-//         job_list_focused: false,
-//         scroll_offset: 0,
-//         horizontal_scroll: 0,
-//         error_indices,
-//         current_error_idx: 0,
-//         step_indices: Vec::new(),
-//         current_step_idx: 0,
-//         expanded_groups: std::collections::HashSet::new(), // Legacy - no groups
-//         show_timestamps: false,
-//         viewport_height: 20,
-//         pr_context,
-//     }
-// }
-// 
-// /// Create LogPanel from parsed job logs (tree view)
-// /// Builds a hierarchical tree: Workflow → Job → Step
+/// Create LogPanel from parsed job logs (tree view)
+/// Builds a hierarchical tree: Workflow → Job → Step
 pub fn create_log_panel_from_jobs(
     jobs: Vec<(JobMetadata, JobLog)>,
     pr_context: PrContext,

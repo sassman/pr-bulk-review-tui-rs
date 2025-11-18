@@ -1475,7 +1475,9 @@ fn handle_key_event(
             KeyCode::Enter => {
                 return Action::ToggleTreeNode;
             }
-            _ => return Action::None,
+            // For all other keys when log panel is open, check if it's a general shortcut
+            // (e.g., '?' for help) - fall through to general shortcut handling below
+            _ => {}
         }
     }
 
@@ -1505,7 +1507,9 @@ fn handle_key_event(
             KeyCode::Char('c') => {
                 return Action::ClearDebugLogs;
             }
-            _ => return Action::None,
+            // For all other keys when debug console is open, check if it's a general shortcut
+            // (e.g., '?' for help) - fall through to general shortcut handling below
+            _ => {}
         }
     }
 
