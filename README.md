@@ -1,4 +1,4 @@
-# PR Bulk Review TUI
+# GitHub PR TUI (`gh-pr-tui`)
 
 A powerful Terminal User Interface (TUI) tool for efficiently reviewing and managing GitHub Pull Requests across multiple repositories.
 
@@ -15,6 +15,7 @@ Also note that every feature is a subject of change as I continue to use and ref
 - **Bulk Operations** - Select and merge/rebase multiple PRs at once
 - **Merge Bot** - Automated merge queue with intelligent rebase handling
 - **CI Integration** - View build status, logs, and rerun failed jobs
+- **Hierarchical Log Viewer** - Tree-based log navigation with smart error jumping
 - **Live Status Updates** - Background checks for merge status and rebase needs
 - **IDE Integration** - Open PRs directly in your IDE for quick review
 - **Keyboard-Driven** - Complete workflow without touching the mouse
@@ -30,7 +31,10 @@ cd gh-pr-tui-rs
 
 # Build and run
 cargo build --release
-cargo run
+./target/release/gh-pr-tui
+
+# Or run directly with cargo
+cargo run --bin gh-pr-tui
 ```
 
 ## Configuration
@@ -58,13 +62,14 @@ Create a `.recent-repositories.json` file to configure your repositories:
 
 ## Quick Start
 
-1. Launch the tool: `cargo run`
+1. Launch the tool: `./target/release/gh-pr-tui` (or `cargo run --bin gh-pr-tui`)
 2. Use `Tab` or `/` to switch between repositories
 3. Use `↑/↓` or `j/k` to navigate PRs
 4. Press `Space` to select/deselect PRs (automatically advances to next PR)
 5. Press `m` to merge selected PRs
-6. Press `i` to open PR in IDE (or main branch if no PRs)
-7. Press `?` for complete keyboard shortcuts
+6. Press `l` to view build logs with smart error navigation
+7. Press `i` to open PR in IDE (or main branch if no PRs)
+8. Press `?` for complete keyboard shortcuts
 
 ---
 
@@ -104,7 +109,23 @@ Create a `.recent-repositories.json` file to configure your repositories:
 
 **The Problem:** When a PR build fails, you need to: click the PR → click "Details" next to the failed check → navigate through GitHub Actions UI → find the failed job → expand the error section → scroll through logs. For complex builds with multiple jobs, finding the actual error can take **5-10 minutes per failed PR**.
 
-**The Solution:** Press `l` on any PR to instantly view parsed build logs. The tool fetches all workflow runs, identifies failures, and presents them in a scrollable, searchable format. Jump between error sections with `n`, toggle timestamps with `t`, and see exactly what failed without leaving the TUI.
+**The Solution:** Press `l` on any PR to instantly view parsed build logs in a hierarchical tree view. The tool fetches all workflow runs, parses GitHub Actions logs with ANSI color preservation, and presents them in an expandable workflow → job → step → log line tree structure.
+
+**Smart Error Navigation:** Press `n` to jump to the next error. The navigation is intelligent:
+- First, it jumps through error lines within the current step (e.g., `error[E0425]`, `error: could not compile`)
+- When no more errors in the step, it jumps to the next failed step
+- When no more failed steps in the job, it jumps to the next failed job
+- Press `p` to navigate backwards through errors the same way
+
+**Log Viewer Features:**
+- Tree navigation with `j/k` to move through workflows/jobs/steps/log lines
+- Expand/collapse nodes with `Enter` to focus on specific sections
+- Page down with `Space` for quick log browsing
+- Horizontal scrolling with `h/l` for long lines
+- Toggle timestamps with `t` for cleaner view
+- Command invocations highlighted in yellow
+- Error messages highlighted in red and bold
+- Proper ANSI color rendering from build tools (cargo, rustc, etc.)
 
 ### Rerun Failed CI Jobs
 
@@ -161,14 +182,25 @@ Create a `.recent-repositories.json` file to configure your repositories:
 - `Ctrl+r` - Refresh current repository
 
 ### Log Panel (when open)
-- `↑/↓` or `j/k` - Scroll vertically
-- `←/→` or `h` - Scroll horizontally
-- `n` - Jump to next error section
+- `↑/↓` or `j/k` - Navigate through tree (workflows/jobs/steps/logs)
+- `Enter` - Expand/collapse tree node
+- `Space` - Page down (scroll by screen height)
+- `←/→` or `h/l` - Scroll horizontally
+- `n` - Jump to next failed step/job (smart error navigation)
+- `p` - Jump to previous failed step/job (smart error navigation)
 - `t` - Toggle timestamps
 - `x` or `Esc` - Close log panel
 
+### Debug Console
+- `` ` `` or `~` - Toggle debug console (Quake-style drop-down)
+- `j/k` (when console open) - Scroll debug console
+- `a` (when console open) - Toggle auto-scroll
+- `c` (when console open) - Clear debug logs
+
 ### General
 - `?` - Toggle keyboard shortcuts help
+- `p → a` - Add new repository
+- `p → d` - Drop/remove current repository
 - `q` - Quit application
 
 ---
@@ -193,13 +225,16 @@ This architecture ensures:
 
 ```bash
 # Run in development mode with logging
-RUST_LOG=debug cargo run
+RUST_LOG=debug cargo run --bin gh-pr-tui
 
 # Run tests
 cargo test
 
 # Build optimized release binary
 cargo build --release
+
+# Run the release binary
+./target/release/gh-pr-tui
 ```
 
 ## License
