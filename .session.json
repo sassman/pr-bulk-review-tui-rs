@@ -1,7 +1,7 @@
 {
   "selected_repo": {
-    "org": "sassman",
-    "repo": "gh-pr-tui-rs",
+    "org": "cargo-generate",
+    "repo": "cargo-generate",
     "branch": "main"
   }
 }

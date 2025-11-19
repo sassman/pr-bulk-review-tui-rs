@@ -984,12 +984,13 @@ fn render_command_palette(f: &mut Frame, area: Rect, app: &App) {
         vertical: 1,
     });
 
-    // Split into input area, results area, and footer
+    // Split into input area, results area, details area, and footer
     let chunks = Layout::default()
         .direction(Direction::Vertical)
         .constraints([
             Constraint::Length(3), // Input box
             Constraint::Min(5),    // Results list
+            Constraint::Length(2), // Details area (for selected command)
             Constraint::Length(1), // Footer
         ])
         .split(inner);
@@ -1136,6 +1137,36 @@ fn render_command_palette(f: &mut Frame, area: Rect, app: &App) {
         f.render_widget(results_paragraph, chunks[1]);
     }
 
+    // Render details area with selected command info
+    if let Some((selected_cmd, _)) = palette
+        .filtered_commands
+        .get(palette.selected_index)
+    {
+        let mut details_text = vec![];
+
+        // Show description
+        details_text.push(Span::styled(
+            selected_cmd.description.clone(),
+            Style::default().fg(theme.text_secondary),
+        ));
+
+        // Show context if present
+        if let Some(ref context) = selected_cmd.context {
+            details_text.push(Span::styled(
+                format!("  ({})", context),
+                Style::default()
+                    .fg(theme.text_muted)
+                    .add_modifier(Modifier::ITALIC),
+            ));
+        }
+
+        let details_line = Line::from(details_text);
+        let details_paragraph = Paragraph::new(details_line)
+            .wrap(Wrap { trim: false })
+            .style(Style::default().bg(theme.bg_panel));
+        f.render_widget(details_paragraph, chunks[2]);
+    }
+
     // Render footer with keyboard hints
     let footer_line = Line::from(vec![
         Span::styled(
@@ -1164,7 +1195,7 @@ fn render_command_palette(f: &mut Frame, area: Rect, app: &App) {
     let footer = Paragraph::new(footer_line)
         .style(Style::default().fg(theme.text_secondary))
         .alignment(ratatui::layout::Alignment::Center);
-    f.render_widget(footer, chunks[2]);
+    f.render_widget(footer, chunks[3]);
 }
 
 /// Render the bottom action panel with context-sensitive shortcuts

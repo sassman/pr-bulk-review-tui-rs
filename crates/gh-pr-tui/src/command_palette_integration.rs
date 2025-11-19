@@ -9,6 +9,24 @@ use crate::actions::Action;
 use crate::shortcuts::{get_all_shortcuts_flat, Shortcut};
 use crate::state::AppState;
 
+/// Parse shortcut hint and extract context information
+///
+/// Extracts context from parentheses (e.g., "a (when console open)" -> ("a", Some("when console open")))
+/// Returns clean shortcut without context.
+fn parse_shortcut_hint(key_display: &str) -> (String, Option<String>) {
+    // Look for parenthetical context like "(when console open)"
+    if let Some(paren_start) = key_display.find('(') {
+        if let Some(paren_end) = key_display.find(')') {
+            let shortcut = key_display[..paren_start].trim();
+            let context = key_display[paren_start + 1..paren_end].trim();
+            return (shortcut.to_string(), Some(context.to_string()));
+        }
+    }
+
+    // No context found
+    (key_display.to_string(), None)
+}
+
 /// Provides commands from keyboard shortcuts
 ///
 /// This provider exposes all keyboard shortcuts as searchable commands in the palette.
@@ -26,11 +44,22 @@ impl CommandProvider<Action, AppState> for ShortcutCommandProvider {
                     return None;
                 }
 
+                // Parse context information from key_display (e.g., "a (when console open)")
+                let (shortcut_hint, context) = parse_shortcut_hint(shortcut.key_display);
+
+                // Add asterisk suffix to title if context is present
+                let title = if context.is_some() {
+                    format!("{} *", shortcut.description)
+                } else {
+                    shortcut.description.to_string()
+                };
+
                 Some(CommandItem {
-                    title: shortcut.description.to_string(),
-                    description: format!("Keyboard shortcut: {}", shortcut.key_display),
+                    title,
+                    description: format!("Keyboard shortcut: {}", shortcut_hint),
                     category: extract_category(&shortcut),
-                    shortcut_hint: Some(shortcut.key_display.to_string()),
+                    shortcut_hint: Some(shortcut_hint),
+                    context,
                     action: shortcut.action.clone(),
                 })
             })
@@ -133,6 +162,24 @@ mod tests {
     use super::*;
     use crate::state::AppState;
     use gh_pr_tui_command_palette::CommandPalette;
+
+    #[test]
+    fn test_parse_shortcut_hint() {
+        // Test context extraction
+        let (hint, context) = parse_shortcut_hint("a (when console open)");
+        assert_eq!(hint, "a");
+        assert_eq!(context, Some("when console open".to_string()));
+
+        // Test without context
+        let (hint, context) = parse_shortcut_hint("Ctrl+P");
+        assert_eq!(hint, "Ctrl+P");
+        assert_eq!(context, None);
+
+        // Test complex shortcut with context
+        let (hint, context) = parse_shortcut_hint("j/k (when console open)");
+        assert_eq!(hint, "j/k");
+        assert_eq!(context, Some("when console open".to_string()));
+    }
 
     #[test]
     fn test_shortcut_provider() {

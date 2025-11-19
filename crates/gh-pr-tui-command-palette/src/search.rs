@@ -94,6 +94,7 @@ mod tests {
                 description: "Open a file from disk".into(),
                 category: "File".into(),
                 shortcut_hint: Some("Ctrl+O".into()),
+                context: None,
                 action: TestAction::Open,
             },
             CommandItem {
@@ -101,6 +102,7 @@ mod tests {
                 description: "Save the current file".into(),
                 category: "File".into(),
                 shortcut_hint: Some("Ctrl+S".into()),
+                context: None,
                 action: TestAction::Save,
             },
             CommandItem {
@@ -108,6 +110,7 @@ mod tests {
                 description: "Close the current window".into(),
                 category: "Window".into(),
                 shortcut_hint: Some("Ctrl+W".into()),
+                context: None,
                 action: TestAction::Close,
             },
         ]
@@ -194,6 +197,7 @@ mod tests {
                 description: "Rebase the selected pull requests".into(),
                 category: "PR Actions".into(),
                 shortcut_hint: Some("r".into()),
+                context: None,
                 action: TestAction::Open,
             },
             CommandItem {
@@ -201,6 +205,7 @@ mod tests {
                 description: "Rerun failed CI jobs for current/selected PRs".into(),
                 category: "PR Actions".into(),
                 shortcut_hint: Some("Shift+R".into()),
+                context: None,
                 action: TestAction::Save,
             },
             CommandItem {
@@ -208,6 +213,7 @@ mod tests {
                 description: "Open PR in your IDE for easy rebase".into(),
                 category: "PR Actions".into(),
                 shortcut_hint: Some("i".into()),
+                context: None,
                 action: TestAction::Close,
             },
         ];

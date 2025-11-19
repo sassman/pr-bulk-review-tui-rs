@@ -19,6 +19,10 @@ pub struct CommandItem<A> {
     /// Keyboard shortcut hint (e.g., "m" or "Ctrl+P")
     pub shortcut_hint: Option<String>,
 
+    /// Optional context information (e.g., "when console open", "if PRs selected")
+    /// Shown as details when the command is selected in the palette
+    pub context: Option<String>,
+
     /// The action to dispatch when this command is executed
     pub action: A,
 }
@@ -129,6 +133,7 @@ mod tests {
                     description: "Exit the application".into(),
                     category: "General".into(),
                     shortcut_hint: Some("q".into()),
+                    context: None,
                     action: TestAction::Quit,
                 },
             ];
@@ -139,6 +144,7 @@ mod tests {
                     description: "Save the current file".into(),
                     category: "File".into(),
                     shortcut_hint: Some("Ctrl+S".into()),
+                    context: None,
                     action: TestAction::Save,
                 });
             }
@@ -184,6 +190,7 @@ mod tests {
             description: "Save the current file".into(),
             category: "File".into(),
             shortcut_hint: Some("Ctrl+S".into()),
+            context: None,
             action: TestAction::Save,
         };
 
