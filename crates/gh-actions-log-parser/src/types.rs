@@ -43,10 +43,10 @@ pub struct LogLine {
     pub group_title: Option<String>,
 
     /// True if this line is pure metadata that should be hidden in normal view
-    /// (e.g., ##[endgroup] with no message, empty lines with commands)
+    /// (e.g., ##\[endgroup\] with no message, empty lines with commands)
     pub is_metadata: bool,
 
-    /// True if this line is a command invocation (had [command] prefix)
+    /// True if this line is a command invocation (had \[command\] prefix)
     pub is_command: bool,
 }
 
