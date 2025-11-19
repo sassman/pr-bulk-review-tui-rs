@@ -33,6 +33,8 @@ pub fn filter_commands<A: Clone>(
     let mut haystack_buf = Vec::new();
     let mut needle_buf = Vec::new();
 
+    let query_lower = query.to_lowercase();
+
     let mut results: Vec<(CommandItem<A>, u16)> = commands
         .iter()
         .filter_map(|cmd| {
@@ -46,7 +48,25 @@ pub fn filter_commands<A: Clone>(
 
             matcher
                 .fuzzy_match(haystack_str, query_str)
-                .map(|score| (cmd.clone(), score))
+                .map(|mut score| {
+                    // Boost score if title or description starts with query (case-insensitive)
+                    // This ensures prefix matches rank higher than fuzzy matches
+                    let title_lower = cmd.title.to_lowercase();
+                    let desc_lower = cmd.description.to_lowercase();
+
+                    if title_lower.starts_with(&query_lower) {
+                        // Title prefix match gets highest boost
+                        score = score.saturating_add(10000);
+                    } else if desc_lower.starts_with(&query_lower) {
+                        // Description prefix match gets moderate boost
+                        score = score.saturating_add(5000);
+                    } else if title_lower.contains(&query_lower) {
+                        // Title contains (not prefix) gets small boost
+                        score = score.saturating_add(1000);
+                    }
+
+                    (cmd.clone(), score)
+                })
         })
         .collect();
 
@@ -163,5 +183,41 @@ mod tests {
         let results = filter_commands(&commands, "window");
         assert!(!results.is_empty());
         assert_eq!(results[0].0.action, TestAction::Close);
+    }
+
+    #[test]
+    fn test_prefix_match_priority() {
+        // Test that prefix matches rank higher than fuzzy matches
+        let commands = vec![
+            CommandItem {
+                title: "Rebase selected PRs".into(),
+                description: "Rebase the selected pull requests".into(),
+                category: "PR Actions".into(),
+                shortcut_hint: Some("r".into()),
+                action: TestAction::Open,
+            },
+            CommandItem {
+                title: "Rerun failed jobs".into(),
+                description: "Rerun failed CI jobs for current/selected PRs".into(),
+                category: "PR Actions".into(),
+                shortcut_hint: Some("Shift+R".into()),
+                action: TestAction::Save,
+            },
+            CommandItem {
+                title: "Open in IDE".into(),
+                description: "Open PR in your IDE for easy rebase".into(),
+                category: "PR Actions".into(),
+                shortcut_hint: Some("i".into()),
+                action: TestAction::Close,
+            },
+        ];
+
+        // Search for "rebase" - should prioritize "Rebase selected PRs"
+        let results = filter_commands(&commands, "rebase");
+        assert!(!results.is_empty());
+        assert_eq!(results[0].0.action, TestAction::Open); // "Rebase selected PRs"
+
+        // Verify the title prefix match has the highest score
+        assert!(results[0].1 > 10000); // Should have prefix boost
     }
 }

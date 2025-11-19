@@ -1071,9 +1071,15 @@ fn render_command_palette(f: &mut Frame, area: Rect, app: &App) {
                     spans.push(Span::raw("             "));
                 }
 
-                // Title
+                // Title (no trailing space, we'll calculate padding)
+                let title_text = if cmd.title.len() > 30 {
+                    format!("{}...", &cmd.title[..27])
+                } else {
+                    cmd.title.clone()
+                };
+
                 spans.push(Span::styled(
-                    format!("{:30} ", cmd.title),
+                    title_text.clone(),
                     Style::default()
                         .fg(if is_selected {
                             theme.selected_fg
@@ -1092,9 +1098,23 @@ fn render_command_palette(f: &mut Frame, area: Rect, app: &App) {
                         }),
                 ));
 
-                // Category
+                // Calculate padding to right-align category
+                // Available width: chunks[1].width
+                // Used: 2 (indicator) + 13 (shortcut) + title_len + category_len + 2 (brackets)
+                let category_text = format!("[{}]", cmd.category);
+                let used_width = 2 + 13 + title_text.len() + category_text.len();
+                let available_width = chunks[1].width as usize;
+                let padding = if available_width > used_width {
+                    available_width.saturating_sub(used_width)
+                } else {
+                    1
+                };
+
+                spans.push(Span::raw(" ".repeat(padding)));
+
+                // Category (right-aligned)
                 spans.push(Span::styled(
-                    format!("[{}]", cmd.category),
+                    category_text,
                     Style::default().fg(if is_selected {
                         theme.text_secondary
                     } else {
