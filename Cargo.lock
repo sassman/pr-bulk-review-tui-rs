@@ -633,6 +633,7 @@ dependencies = [
  "dotenvy",
  "env_logger",
  "gh-actions-log-parser",
+ "gh-pr-tui-command-palette",
  "log",
  "octocrab",
  "ratatui",
@@ -641,6 +642,13 @@ dependencies = [
  "tokio",
  "toml",
  "zip",
+]
+
+[[package]]
+name = "gh-pr-tui-command-palette"
+version = "0.1.0"
+dependencies = [
+ "nucleo-matcher",
 ]
 
 [[package]]
@@ -1168,6 +1176,16 @@ checksum = "d273983c5a657a70a3e8f2a01329822f3b8c8172b73826411a55751e404a0a4a"
 dependencies = [
  "memchr",
  "minimal-lexical",
+]
+
+[[package]]
+name = "nucleo-matcher"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "bf33f538733d1a5a3494b836ba913207f14d9d4a1d3cd67030c5061bdd2cac85"
+dependencies = [
+ "memchr",
+ "unicode-segmentation",
 ]
 
 [[package]]

@@ -117,6 +117,15 @@ pub enum Action {
     UpdateLogPanelViewport(usize),
     UpdateDebugConsoleViewport(usize),
 
+    // Command palette
+    ShowCommandPalette,
+    HideCommandPalette,
+    CommandPaletteInput(char),
+    CommandPaletteBackspace,
+    CommandPaletteSelectNext,
+    CommandPaletteSelectPrev,
+    CommandPaletteExecute,
+
     Quit,
     None,
 }

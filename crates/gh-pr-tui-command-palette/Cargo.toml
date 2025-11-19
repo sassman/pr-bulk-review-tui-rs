@@ -1,0 +1,10 @@
+[package]
+name = "gh-pr-tui-command-palette"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+# Fuzzy matching
+nucleo-matcher = "0.3"
+
+[dev-dependencies]
