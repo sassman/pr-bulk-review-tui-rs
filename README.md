@@ -93,6 +93,12 @@ Create a `.recent-repositories.json` file to configure your repositories:
 
 **The Solution:** Select multiple PRs with `Space`, then press `m` to merge all selected PRs in one operation. The tool handles the GitHub API calls in parallel and provides real-time feedback. Merge 20 PRs in under 30 seconds.
 
+### Bulk Close Operations
+
+**The Problem:** Sometimes PRs become obsolete - duplicate work, abandoned features, or PRs that are no longer needed. Closing multiple PRs in GitHub requires: click each PR → scroll to bottom → add comment explaining why → click "Close pull request" → navigate back → repeat. For repositories with many stale dependabot PRs or obsolete feature branches, this can take **5-10 minutes for 10 PRs**.
+
+**The Solution:** Select PRs with `Space`, then press `c` to open the close dialog. Enter a comment (defaults to "Not needed anymore"), and press `Enter` to close all selected PRs at once. The tool intelligently uses `@dependabot close` for dependabot PRs and adds your comment to regular PRs. After closing, the tool automatically refreshes the PR list so closed PRs disappear immediately. Close 20 obsolete PRs in under a minute.
+
 ### Automated Merge Bot
 
 **The Problem:** Maintaining a repository with CI checks means PRs often become stale while waiting for builds, or they need rebasing before they can merge. The manual workflow is: check if PR is ready → check if it needs rebase → rebase if needed → wait for CI → check again → merge → repeat for next PR. This supervision can take **hours of intermittent checking** across a day.
@@ -170,6 +176,8 @@ Create a `.recent-repositories.json` file to configure your repositories:
 ### PR Actions
 - `Space` - Select/deselect PR (auto-advances to next)
 - `m` - Merge selected PRs
+- `a` - Approve selected PRs
+- `c` - Close selected PRs (with comment)
 - `Ctrl+m` - Start merge bot (auto-merge + rebase queue)
 - `r` - Rebase selected PRs (or auto-rebase if none selected)
 - `Shift+R` - Rerun failed CI jobs for current/selected PRs
@@ -199,6 +207,7 @@ Create a `.recent-repositories.json` file to configure your repositories:
 
 ### General
 - `?` - Toggle keyboard shortcuts help
+- `Esc → Esc` - Clear all PR selections
 - `p → a` - Add new repository
 - `p → d` - Drop/remove current repository
 - `q` - Quit application

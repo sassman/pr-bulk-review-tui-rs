@@ -338,8 +338,7 @@ impl MergeBot {
             current_index,
             operation: Operation::WaitForMergeConfirmation,
         } = &self.state
-        {
-            if queue[*current_index].pr_number == pr_number {
+            && queue[*current_index].pr_number == pr_number {
                 if is_merged {
                     // PR is confirmed merged, mark as complete and move to next
                     let mut new_queue = queue.clone();
@@ -353,7 +352,6 @@ impl MergeBot {
                     // State remains the same
                 }
             }
-        }
     }
 
     /// Handle PR status update - check if we can proceed after waiting for CI
@@ -363,8 +361,7 @@ impl MergeBot {
             current_index,
             operation: Operation::CheckCI,
         } = &self.state
-        {
-            if queue[*current_index].pr_number == pr_number {
+            && queue[*current_index].pr_number == pr_number {
                 match status {
                     MergeableStatus::Ready => {
                         // CI passed, go back to processing to merge
@@ -395,7 +392,6 @@ impl MergeBot {
                     }
                 }
             }
-        }
     }
 }
 

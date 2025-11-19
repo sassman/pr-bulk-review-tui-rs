@@ -33,7 +33,7 @@ pub enum Effect {
 
     /// Trigger background task to load all repos
     LoadAllRepos {
-        repos: Vec<Repo>,
+        repos: Vec<(usize, Repo)>, // (repo_index, repo) pairs
         filter: crate::state::PrFilter,
     },
 
@@ -43,6 +43,9 @@ pub enum Effect {
         repo: Repo,
         filter: crate::state::PrFilter,
     },
+
+    /// Trigger delayed repo reload (waits before reloading)
+    DelayedRepoReload { repo_index: usize, delay_ms: u64 },
 
     /// Trigger background merge status checks
     CheckMergeStatus {
@@ -72,7 +75,14 @@ pub enum Effect {
     PerformMerge { repo: Repo, prs: Vec<Pr> },
 
     /// Approve PRs with configured message
-    ApprovePrs { repo: Repo, pr_numbers: Vec<usize>, approval_message: String },
+    ApprovePrs {
+        repo: Repo,
+        pr_numbers: Vec<usize>,
+        approval_message: String,
+    },
+
+    /// Close PRs with comment
+    ClosePrs { comment: String },
 
     /// Open PR in browser
     OpenInBrowser { url: String },
@@ -102,6 +112,14 @@ pub enum Effect {
         repo: Repo,
         pr_number: usize,
         operation: crate::state::OperationType,
+    },
+
+    /// Poll PR merge status (for merge bot)
+    PollPRMergeStatus {
+        repo_index: usize,
+        repo: Repo,
+        pr_number: usize,
+        is_checking_ci: bool,
     },
 
     /// Add a new repository
@@ -198,7 +216,10 @@ pub async fn execute_effect(app: &mut App, effect: Effect) -> Result<Vec<Action>
 
                     // Restore session
                     let selected_repo: usize = if let Ok(state) = load_persisted_state() {
-                        repos.iter().position(|r| r == &state.selected_repo).unwrap_or_default()
+                        repos
+                            .iter()
+                            .position(|r| r == &state.selected_repo)
+                            .unwrap_or_default()
                     } else {
                         0
                     };
@@ -218,14 +239,12 @@ pub async fn execute_effect(app: &mut App, effect: Effect) -> Result<Vec<Action>
 
         Effect::LoadAllRepos { repos, filter } => {
             // Trigger background task to load all repos
-            let num_repos = repos.len();
-            follow_up_actions.push(Action::SetTaskStatus(Some(TaskStatus {
-                message: format!("Loading PRs from {} repositories...", num_repos),
-                status_type: TaskStatusType::Running,
-            })));
-
-            let indices: Vec<usize> = (0..num_repos).collect();
+            // Extract the repo indices from the (index, repo) pairs
+            let indices: Vec<usize> = repos.iter().map(|(i, _)| *i).collect();
             follow_up_actions.push(Action::SetReposLoading(indices));
+
+            // Don't show "Loading PRs from X repositories..." if we're in background loading mode
+            // (individual repo status messages will be shown instead)
 
             let _ = app.task_tx.send(BackgroundTask::LoadAllRepos {
                 repos,
@@ -254,17 +273,39 @@ pub async fn execute_effect(app: &mut App, effect: Effect) -> Result<Vec<Action>
             });
         }
 
+        Effect::DelayedRepoReload {
+            repo_index,
+            delay_ms,
+        } => {
+            // Trigger delayed repo reload using DelayedTask wrapper
+            if let Some(repo) = app.store.state().repos.recent_repos.get(repo_index).cloned() {
+                let filter = app.store.state().repos.filter.clone();
+                let _ = app.task_tx.send(BackgroundTask::DelayedTask {
+                    task: Box::new(BackgroundTask::LoadSingleRepo {
+                        repo_index,
+                        repo,
+                        filter,
+                        octocrab: app.octocrab()?,
+                    }),
+                    delay_ms,
+                });
+            }
+        }
+
         Effect::CheckMergeStatus {
             repo_index,
             repo,
             pr_numbers,
         } => {
             // Trigger background merge status checks
-            let _ = app.task_tx.send(BackgroundTask::CheckMergeStatus {
-                repo_index,
-                repo,
-                pr_numbers,
-                octocrab: app.octocrab()?,
+            let _ = app.task_tx.send(BackgroundTask::DelayedTask {
+                task: Box::new(BackgroundTask::CheckMergeStatus {
+                    repo_index,
+                    repo,
+                    pr_numbers,
+                    octocrab: app.octocrab()?,
+                }),
+                delay_ms: 500,
             });
         }
 
@@ -320,7 +361,11 @@ pub async fn execute_effect(app: &mut App, effect: Effect) -> Result<Vec<Action>
             });
         }
 
-        Effect::ApprovePrs { repo, pr_numbers, approval_message } => {
+        Effect::ApprovePrs {
+            repo,
+            pr_numbers,
+            approval_message,
+        } => {
             // Approve PRs with configured message
             follow_up_actions.push(Action::SetTaskStatus(Some(TaskStatus {
                 message: format!("Approving {} PR(s)...", pr_numbers.len()),
@@ -333,6 +378,62 @@ pub async fn execute_effect(app: &mut App, effect: Effect) -> Result<Vec<Action>
                 approval_message,
                 octocrab: app.octocrab()?,
             });
+        }
+
+        Effect::ClosePrs { comment } => {
+            // Close selected PRs with comment
+            let state = app.store.state();
+            let repo_index = state.repos.selected_repo;
+
+            if let Some(repo) = state.repos.recent_repos.get(repo_index).cloned() {
+                // Get selected PRs or current PR
+                let has_selection = if let Some(data) = state.repos.repo_data.get(&repo_index) {
+                    !data.selected_pr_numbers.is_empty()
+                } else {
+                    false
+                };
+
+                let (pr_numbers, prs): (Vec<usize>, Vec<crate::pr::Pr>) = if !has_selection {
+                    // No selection - use current cursor PR
+                    state
+                        .repos
+                        .state
+                        .selected()
+                        .and_then(|idx| state.repos.prs.get(idx).cloned())
+                        .map(|pr| (vec![pr.number], vec![pr]))
+                        .unwrap_or((vec![], vec![]))
+                } else if let Some(data) = state.repos.repo_data.get(&repo_index) {
+                    let selected_prs: Vec<_> = state
+                        .repos
+                        .prs
+                        .iter()
+                        .filter(|pr| {
+                            data.selected_pr_numbers
+                                .contains(&crate::state::PrNumber::from_pr(pr))
+                        })
+                        .cloned()
+                        .collect();
+                    let pr_numbers = selected_prs.iter().map(|pr| pr.number).collect();
+                    (pr_numbers, selected_prs)
+                } else {
+                    (vec![], vec![])
+                };
+
+                if !pr_numbers.is_empty() {
+                    follow_up_actions.push(Action::SetTaskStatus(Some(TaskStatus {
+                        message: format!("Closing {} PR(s)...", pr_numbers.len()),
+                        status_type: TaskStatusType::Running,
+                    })));
+
+                    let _ = app.task_tx.send(BackgroundTask::ClosePrs {
+                        repo,
+                        pr_numbers,
+                        prs,
+                        comment,
+                        octocrab: app.octocrab()?,
+                    });
+                }
+            }
         }
 
         Effect::OpenInBrowser { url } => {
@@ -453,7 +554,10 @@ pub async fn execute_effect(app: &mut App, effect: Effect) -> Result<Vec<Action>
                 crate::state::OperationType::Rebase => "Rebase",
                 crate::state::OperationType::Merge => "Merge",
             };
-            debug!("Starting {} monitoring for PR #{}", operation_name, pr_number);
+            debug!(
+                "Starting {} monitoring for PR #{}",
+                operation_name, pr_number
+            );
 
             let _ = app.task_tx.send(BackgroundTask::MonitorOperation {
                 repo_index,
@@ -461,6 +565,22 @@ pub async fn execute_effect(app: &mut App, effect: Effect) -> Result<Vec<Action>
                 pr_number,
                 operation,
                 octocrab: app.octocrab()?,
+            });
+        }
+
+        Effect::PollPRMergeStatus {
+            repo_index,
+            repo,
+            pr_number,
+            is_checking_ci,
+        } => {
+            // Poll PR to check if it's merged (for merge bot)
+            let _ = app.task_tx.send(BackgroundTask::PollPRMergeStatus {
+                repo_index,
+                repo,
+                pr_number,
+                octocrab: app.octocrab()?,
+                is_checking_ci,
             });
         }
 

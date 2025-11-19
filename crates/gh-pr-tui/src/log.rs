@@ -351,14 +351,13 @@ fn build_tree_row(panel: &LogPanel, path: &[usize], theme: &crate::theme::Theme)
             let mut spans = vec![Span::styled(prefix, Style::default().fg(theme.text_muted).bg(theme.bg_panel))];
 
             // Add timestamp if enabled and available
-            if panel.show_timestamps {
-                if let Some(ref timestamp) = line.timestamp {
+            if panel.show_timestamps
+                && let Some(ref timestamp) = line.timestamp {
                     spans.push(Span::styled(
                         format!("[{}] ", timestamp),
                         Style::default().fg(theme.text_muted).bg(theme.bg_panel),
                     ));
                 }
-            }
 
             spans.extend(content.spans);
             Line::from(spans)
@@ -492,7 +491,7 @@ pub fn create_log_panel_from_jobs(
 
         workflows_map
             .entry(metadata.workflow_name.clone())
-            .or_insert_with(Vec::new)
+            .or_default()
             .push((metadata, job_node));
     }
 
@@ -564,8 +563,8 @@ impl LogPanel {
         }
 
         // Find current position in flattened list
-        if let Some(current_idx) = visible.iter().position(|path| path == &self.cursor_path) {
-            if current_idx < visible.len() - 1 {
+        if let Some(current_idx) = visible.iter().position(|path| path == &self.cursor_path)
+            && current_idx < visible.len() - 1 {
                 let new_idx = current_idx + 1;
                 self.cursor_path = visible[new_idx].clone();
 
@@ -575,7 +574,6 @@ impl LogPanel {
                     self.scroll_offset = new_idx.saturating_sub(self.viewport_height.saturating_sub(1));
                 }
             }
-        }
     }
 
     /// Navigate up to previous visible tree node
@@ -586,8 +584,8 @@ impl LogPanel {
         }
 
         // Find current position in flattened list
-        if let Some(current_idx) = visible.iter().position(|path| path == &self.cursor_path) {
-            if current_idx > 0 {
+        if let Some(current_idx) = visible.iter().position(|path| path == &self.cursor_path)
+            && current_idx > 0 {
                 let new_idx = current_idx - 1;
                 self.cursor_path = visible[new_idx].clone();
 
@@ -596,7 +594,6 @@ impl LogPanel {
                     self.scroll_offset = new_idx;
                 }
             }
-        }
     }
 
     /// Toggle expand/collapse at cursor
@@ -662,9 +659,9 @@ impl LogPanel {
             let step_path = &self.cursor_path[0..3]; // [workflow, job, step]
 
             // Get the step to check for error lines
-            if let Some(workflow) = self.workflows.get(step_path[0]) {
-                if let Some(job) = workflow.jobs.get(step_path[1]) {
-                    if let Some(step) = job.steps.get(step_path[2]) {
+            if let Some(workflow) = self.workflows.get(step_path[0])
+                && let Some(job) = workflow.jobs.get(step_path[1])
+                    && let Some(step) = job.steps.get(step_path[2]) {
                         // Check if step is expanded (has visible lines)
                         if self.is_expanded(step_path) {
                             let start_line_idx = if self.cursor_path.len() == 4 {
@@ -700,8 +697,6 @@ impl LogPanel {
                             }
                         }
                     }
-                }
-            }
         }
 
         // No more error lines in current step, jump to next step/job with errors
@@ -730,13 +725,12 @@ impl LogPanel {
         }
 
         // Wrap to first error
-        if let Some(first_error) = error_paths.first() {
-            if let Some(idx) = visible.iter().position(|path| path == first_error) {
+        if let Some(first_error) = error_paths.first()
+            && let Some(idx) = visible.iter().position(|path| path == first_error) {
                 self.cursor_path = first_error.clone();
                 // Auto-scroll to top when wrapping
                 self.scroll_offset = idx;
             }
-        }
     }
 
     /// Find previous error across entire tree
@@ -748,9 +742,9 @@ impl LogPanel {
             let step_path = &self.cursor_path[0..3]; // [workflow, job, step]
 
             // Get the step to check for error lines
-            if let Some(workflow) = self.workflows.get(step_path[0]) {
-                if let Some(job) = workflow.jobs.get(step_path[1]) {
-                    if let Some(step) = job.steps.get(step_path[2]) {
+            if let Some(workflow) = self.workflows.get(step_path[0])
+                && let Some(job) = workflow.jobs.get(step_path[1])
+                    && let Some(step) = job.steps.get(step_path[2]) {
                         // Check if step is expanded (has visible lines)
                         if self.is_expanded(step_path) {
                             let end_line_idx = if self.cursor_path.len() == 4 {
@@ -786,8 +780,6 @@ impl LogPanel {
                             }
                         }
                     }
-                }
-            }
         }
 
         // No more error lines in current step, jump to previous step/job with errors
@@ -801,7 +793,7 @@ impl LogPanel {
         if let Some(current_idx) = visible.iter().position(|path| path == &self.cursor_path) {
             // Look for previous error path before current position (iterate backwards)
             for (idx, path) in visible.iter().enumerate().take(current_idx).rev() {
-                if error_paths.contains(&path) {
+                if error_paths.contains(path) {
                     self.cursor_path = path.clone();
                     // Auto-scroll to keep cursor visible
                     let max_visible_idx = self.scroll_offset + self.viewport_height.saturating_sub(1);
@@ -816,8 +808,8 @@ impl LogPanel {
         }
 
         // Wrap to last error
-        if let Some(last_error) = error_paths.last() {
-            if let Some(idx) = visible.iter().position(|path| path == last_error) {
+        if let Some(last_error) = error_paths.last()
+            && let Some(idx) = visible.iter().position(|path| path == last_error) {
                 self.cursor_path = last_error.clone();
                 // Auto-scroll when wrapping
                 let max_visible_idx = self.scroll_offset + self.viewport_height.saturating_sub(1);
@@ -827,7 +819,6 @@ impl LogPanel {
                     self.scroll_offset = idx;
                 }
             }
-        }
     }
 
     /// Collect all tree paths that have errors

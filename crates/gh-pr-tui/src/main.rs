@@ -11,7 +11,11 @@ use ratatui::{
     widgets::*,
 };
 use serde::{Deserialize, Serialize};
-use std::{fs::File, io::BufReader, sync::{Arc, Mutex}};
+use std::{
+    fs::File,
+    io::BufReader,
+    sync::{Arc, Mutex},
+};
 use tokio::sync::mpsc;
 
 // Import debug from the log crate using :: prefix to disambiguate from our log module
@@ -48,6 +52,7 @@ pub struct App {
     pub task_tx: mpsc::UnboundedSender<BackgroundTask>,
     // Lazy-initialized octocrab client (created after .env is loaded)
     pub octocrab: Option<Octocrab>,
+    // Splash screen state
 }
 
 #[derive(Debug, Serialize, Deserialize, Eq, Clone, PartialEq)]
@@ -76,8 +81,24 @@ fn shutdown() -> Result<()> {
 }
 
 async fn update(app: &mut App, msg: Action) -> Result<Action> {
-    // When add repo popup is open, handle popup-specific actions
-    let msg = if app.store.state().ui.show_add_repo {
+    // When close PR popup is open, handle popup-specific actions
+    let msg = if app.store.state().ui.close_pr_state.is_some() {
+        match msg {
+            // Allow these actions in the popup
+            Action::HideClosePrPopup
+            | Action::ClosePrFormInput(_)
+            | Action::ClosePrFormBackspace
+            | Action::ClosePrFormSubmit
+            | Action::None => msg, // Allow None for keys we ignore (arrows, etc.)
+            // Quit closes the popup
+            Action::Quit => Action::HideClosePrPopup,
+            // Ignore all other actions while popup is open
+            _ => {
+                return Ok(Action::None);
+            }
+        }
+    } else if app.store.state().ui.show_add_repo {
+        // When add repo popup is open, handle popup-specific actions
         match msg {
             // Allow these actions in the popup
             Action::HideAddRepoPopup
@@ -135,10 +156,12 @@ async fn update(app: &mut App, msg: Action) -> Result<Action> {
 fn start_event_handler(
     app: &App,
     tx: mpsc::UnboundedSender<Action>,
+    show_close_pr_sync: Arc<Mutex<bool>>,
 ) -> (tokio::task::JoinHandle<()>, Arc<Mutex<bool>>) {
     let tick_rate = std::time::Duration::from_millis(250);
-    // Clone the shared popup state flag for the event loop
+    // Clone the shared popup state flags for the event loop
     let show_add_repo_shared = app.store.state().ui.show_add_repo_shared.clone();
+    let show_close_pr_shared = show_close_pr_sync;
     // Clone the pending key state for two-key combinations
     let pending_key_shared = app.store.state().ui.pending_key.clone();
     // Clone the shared log panel state for the event loop
@@ -150,19 +173,29 @@ fn start_event_handler(
     let debug_console_open_shared = Arc::new(Mutex::new(false));
     let debug_console_open = debug_console_open_shared.clone();
 
+    let close_pr_shared_for_loop = show_close_pr_shared.clone();
     let handle = tokio::spawn(async move {
         loop {
             let action = if crossterm::event::poll(tick_rate).unwrap() {
                 let show_add_repo = *show_add_repo_shared.lock().unwrap();
+                let show_close_pr = *close_pr_shared_for_loop.lock().unwrap();
                 let log_panel_open_val = *log_panel_open.lock().unwrap();
                 let job_list_focused_val = *job_list_focused.lock().unwrap();
                 let console_open = *debug_console_open.lock().unwrap();
-                handle_events(show_add_repo, log_panel_open_val, job_list_focused_val, console_open, &pending_key_shared).unwrap_or(Action::None)
+                handle_events(
+                    show_add_repo,
+                    show_close_pr,
+                    log_panel_open_val,
+                    job_list_focused_val,
+                    console_open,
+                    &pending_key_shared,
+                )
+                .unwrap_or(Action::None)
             } else {
                 Action::None
             };
 
-            if let Err(_) = tx.send(action) {
+            if tx.send(action).is_err() {
                 break;
             }
         }
@@ -189,6 +222,7 @@ fn result_to_action(result: TaskResult) -> Action {
         TaskResult::MergeComplete(res) => Action::MergeComplete(res),
         TaskResult::RerunJobsComplete(res) => Action::RerunJobsComplete(res),
         TaskResult::ApprovalComplete(res) => Action::ApprovalComplete(res),
+        TaskResult::ClosePrComplete(res) => Action::ClosePrComplete(res),
         TaskResult::BuildLogsLoaded(sections, ctx) => Action::BuildLogsLoaded(sections, ctx),
         TaskResult::IDEOpenComplete(res) => Action::IDEOpenComplete(res),
         TaskResult::PRMergedConfirmed(idx, pr_num, merged) => {
@@ -205,9 +239,7 @@ fn result_to_action(result: TaskResult) -> Action {
         TaskResult::RemoveFromOperationMonitor(idx, pr_num) => {
             Action::RemoveFromOperationMonitor(idx, pr_num)
         }
-        TaskResult::RepoNeedsReload(idx) => {
-            Action::ReloadRepo(idx)
-        }
+        TaskResult::RepoNeedsReload(idx) => Action::ReloadRepo(idx),
     }
 }
 
@@ -220,7 +252,10 @@ async fn run_with_log_buffer(log_buffer: log_capture::LogBuffer) -> Result<()> {
 
     let mut app = App::new(action_tx.clone(), task_tx, log_buffer);
 
-    let (event_task, debug_console_shared) = start_event_handler(&app, app.action_tx.clone());
+    // Create shared state for close PR popup (synced in main loop)
+    let show_close_pr_shared = Arc::new(Mutex::new(false));
+    let (event_task, debug_console_shared) =
+        start_event_handler(&app, app.action_tx.clone(), show_close_pr_shared.clone());
     let worker_task = start_task_worker(task_rx, result_tx);
 
     app.action_tx
@@ -228,17 +263,22 @@ async fn run_with_log_buffer(log_buffer: log_capture::LogBuffer) -> Result<()> {
         .expect("Failed to send bootstrap action");
 
     loop {
-        // Sync the shared popup state for event handler
+        // Sync the shared popup states for event handler
         *app.store.state().ui.show_add_repo_shared.lock().unwrap() =
             app.store.state().ui.show_add_repo;
+        // Sync close PR popup visibility to shared state
+        *show_close_pr_shared.lock().unwrap() = app.store.state().ui.close_pr_state.is_some();
 
         // Sync the shared debug console state for event handler
-        *debug_console_shared.lock().unwrap() =
-            app.store.state().debug_console.is_open;
+        *debug_console_shared.lock().unwrap() = app.store.state().debug_console.is_open;
 
         // Sync the shared log panel state for event handler
-        *app.store.state().log_panel.log_panel_open_shared.lock().unwrap() =
-            app.store.state().log_panel.panel.is_some();
+        *app.store
+            .state()
+            .log_panel
+            .log_panel_open_shared
+            .lock()
+            .unwrap() = app.store.state().log_panel.panel.is_some();
 
         t.draw(|f| {
             ui(f, &mut app);
@@ -272,101 +312,9 @@ async fn run_with_log_buffer(log_buffer: log_capture::LogBuffer) -> Result<()> {
             Err(_) => {
                 // Timeout - tick spinner animation (maintains clean architecture without blocking progress)
                 let _ = app.action_tx.send(Action::TickSpinner);
-                // Also step the merge bot if it's running
+                // Also step the merge bot if it's running (Redux action)
                 if app.store.state().merge_bot.bot.is_running() {
-                    if let Some(repo) = app.repo().cloned() {
-                        let repo_data = app.get_current_repo_data();
-
-                        // Process next PR in queue
-                        if let Some(action) = app
-                            .store
-                            .state_mut()
-                            .merge_bot
-                            .bot
-                            .process_next(&repo_data.prs)
-                        {
-                            use crate::merge_bot::MergeBotAction;
-                            match action {
-                                MergeBotAction::DispatchMerge(indices) => {
-                                    // Dispatch merge action
-                                    if let Ok(octocrab) = app.octocrab() {
-                                        let _ = app.task_tx.send(BackgroundTask::Merge {
-                                            repo: repo.clone(),
-                                            prs: repo_data.prs.clone(),
-                                            selected_indices: indices,
-                                            octocrab,
-                                        });
-                                    }
-                                    app.store.state_mut().task.status = Some(TaskStatus {
-                                        message: app.store.state().merge_bot.bot.status_message(),
-                                        status_type: TaskStatusType::Running,
-                                    });
-                                }
-                                MergeBotAction::DispatchRebase(indices) => {
-                                    // Dispatch rebase action
-                                    if let Ok(octocrab) = app.octocrab() {
-                                        let _ = app.task_tx.send(BackgroundTask::Rebase {
-                                            repo: repo.clone(),
-                                            prs: repo_data.prs.clone(),
-                                            selected_indices: indices,
-                                            octocrab,
-                                        });
-                                    }
-                                    app.store.state_mut().task.status = Some(TaskStatus {
-                                        message: app.store.state().merge_bot.bot.status_message(),
-                                        status_type: TaskStatusType::Running,
-                                    });
-                                }
-                                MergeBotAction::WaitForCI(_pr_number) => {
-                                    // Just update status, CI waiting is now handled via polling
-                                    app.store.state_mut().task.status = Some(TaskStatus {
-                                        message: app.store.state().merge_bot.bot.status_message(),
-                                        status_type: TaskStatusType::Running,
-                                    });
-                                }
-                                MergeBotAction::PollMergeStatus(pr_number, is_checking_ci) => {
-                                    // Dispatch polling task to check PR status
-                                    // is_checking_ci determines sleep duration: 15s for CI, 2s for merge
-                                    if let Ok(octocrab) = app.octocrab() {
-                                        let _ =
-                                            app.task_tx.send(BackgroundTask::PollPRMergeStatus {
-                                                repo_index: app.store.state().repos.selected_repo,
-                                                repo: repo.clone(),
-                                                pr_number,
-                                                octocrab,
-                                                is_checking_ci,
-                                            });
-                                    }
-                                    app.store.state_mut().task.status = Some(TaskStatus {
-                                        message: app.store.state().merge_bot.bot.status_message(),
-                                        status_type: TaskStatusType::Running,
-                                    });
-                                }
-                                MergeBotAction::PrSkipped(_pr_number, _reason) => {
-                                    // Update status and continue
-                                    app.store.state_mut().task.status = Some(TaskStatus {
-                                        message: app.store.state().merge_bot.bot.status_message(),
-                                        status_type: TaskStatusType::Running,
-                                    });
-                                }
-                                MergeBotAction::Completed => {
-                                    app.store.state_mut().task.status = Some(TaskStatus {
-                                        message: app.store.state().merge_bot.bot.status_message(),
-                                        status_type: TaskStatusType::Success,
-                                    });
-                                    // Refresh the PR list
-                                    if let Ok(octocrab) = app.octocrab() {
-                                        let _ = app.task_tx.send(BackgroundTask::LoadSingleRepo {
-                                            repo_index: app.store.state().repos.selected_repo,
-                                            repo: repo.clone(),
-                                            filter: app.store.state().repos.filter.clone(),
-                                            octocrab,
-                                        });
-                                    }
-                                }
-                            }
-                        }
-                    }
+                    let _ = app.action_tx.send(Action::MergeBotTick);
                 }
             }
         }
@@ -390,8 +338,14 @@ async fn run_with_log_buffer(log_buffer: log_capture::LogBuffer) -> Result<()> {
 }
 
 fn ui(f: &mut Frame, app: &mut App) {
-    // Show bootstrap status if not completed
-    if app.store.state().repos.bootstrap_state != BootstrapState::Completed {
+    // Show bootstrap/splash screen until UI is ready (first repo loaded)
+    let ui_ready = matches!(
+        app.store.state().repos.bootstrap_state,
+        BootstrapState::UIReady | BootstrapState::LoadingRemainingRepos | BootstrapState::Completed
+    );
+
+    if !ui_ready {
+        // Show bootstrap screen during loading
         render_bootstrap_screen(f, app);
         return;
     }
@@ -431,12 +385,26 @@ fn ui(f: &mut Frame, app: &mut App) {
         .iter()
         .enumerate()
         .map(|(i, repo)| {
+            // Check if this repo is currently loading
+            let is_loading = app
+                .store
+                .state()
+                .repos
+                .repo_data
+                .get(&i)
+                .map(|data| matches!(data.loading_state, LoadingState::Loading))
+                .unwrap_or(false);
+
             let number = if i < 9 {
                 format!("{} ", i + 1)
             } else {
                 String::new()
             };
-            Line::from(format!("{}{}/{}", number, repo.org, repo.repo))
+
+            // Add sandglass before number if loading
+            let prefix = if is_loading { "⏳ " } else { "" };
+
+            Line::from(format!("{}{}{}/{}", prefix, number, repo.org, repo.repo))
         })
         .collect();
 
@@ -533,7 +501,10 @@ fn ui(f: &mut Frame, app: &mut App) {
             };
             // Use theme color for selected rows (Space key)
             // Now using type-safe PR numbers for stable selection across filtering/reloading
-            let color = if repo_data.selected_pr_numbers.contains(&PrNumber::from_pr(item)) {
+            let color = if repo_data
+                .selected_pr_numbers
+                .contains(&PrNumber::from_pr(item))
+            {
                 app.store.state().theme.selected_bg
             } else {
                 color
@@ -573,9 +544,11 @@ fn ui(f: &mut Frame, app: &mut App) {
 
     // Render log panel LAST if it's open - covers only the table area
     if let Some(ref panel) = app.store.state().log_panel.panel {
-        let viewport_height = crate::log::render_log_panel_card(f, panel, &app.store.state().theme, chunks[1]);
+        let viewport_height =
+            crate::log::render_log_panel_card(f, panel, &app.store.state().theme, chunks[1]);
         // Update viewport height for page down scrolling
-        app.store.dispatch(Action::UpdateLogPanelViewport(viewport_height));
+        app.store
+            .dispatch(Action::UpdateLogPanelViewport(viewport_height));
     }
 
     // Render shortcuts panel on top of everything if visible
@@ -599,11 +572,22 @@ fn ui(f: &mut Frame, app: &mut App) {
         );
     }
 
+    // Render close PR popup on top of everything if visible
+    if let Some(ref close_pr_state) = app.store.state().ui.close_pr_state {
+        render_close_pr_popup(
+            f,
+            chunks[1],
+            &close_pr_state.comment,
+            &app.store.state().theme,
+        );
+    }
+
     // Render debug console (Quake-style drop-down) if visible
     if app.store.state().debug_console.is_open {
         let viewport_height = render_debug_console(f, f.area(), app);
         // Update viewport height for page down scrolling
-        app.store.dispatch(Action::UpdateDebugConsoleViewport(viewport_height));
+        app.store
+            .dispatch(Action::UpdateDebugConsoleViewport(viewport_height));
     }
 }
 
@@ -808,6 +792,107 @@ fn render_add_repo_popup(f: &mut Frame, area: Rect, form: &AddRepoForm, theme: &
         Span::styled(" add  ", Style::default().fg(theme.text_muted)),
         Span::styled(
             "Esc",
+            Style::default()
+                .fg(theme.accent_primary)
+                .add_modifier(Modifier::BOLD),
+        ),
+        Span::styled(" cancel", Style::default().fg(theme.text_muted)),
+    ]));
+
+    // Render content
+    let paragraph = Paragraph::new(text_lines)
+        .wrap(Wrap { trim: false })
+        .style(Style::default().bg(theme.bg_panel));
+
+    f.render_widget(paragraph, inner);
+}
+
+/// Render the close PR popup as a centered floating window
+fn render_close_pr_popup(f: &mut Frame, area: Rect, comment: &str, theme: &Theme) {
+    use ratatui::widgets::{Clear, Wrap};
+
+    // Calculate centered area (50% width, smaller height)
+    let popup_width = (area.width * 50 / 100).min(60);
+    let popup_height = 8; // Fixed height for the form
+    let popup_x = (area.width.saturating_sub(popup_width)) / 2;
+    let popup_y = (area.height.saturating_sub(popup_height)) / 2;
+
+    let popup_area = Rect {
+        x: area.x + popup_x,
+        y: area.y + popup_y,
+        width: popup_width,
+        height: popup_height,
+    };
+
+    // Clear the area and render background
+    f.render_widget(Clear, popup_area);
+    f.render_widget(
+        Block::default().style(Style::default().bg(theme.bg_panel)),
+        popup_area,
+    );
+
+    // Render border and title
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .title(" Close Pull Request(s) ")
+        .title_style(
+            Style::default()
+                .fg(theme.accent_primary)
+                .add_modifier(Modifier::BOLD),
+        )
+        .border_style(
+            Style::default()
+                .fg(theme.accent_primary)
+                .add_modifier(Modifier::BOLD),
+        )
+        .style(Style::default().bg(theme.bg_panel));
+
+    f.render_widget(block, popup_area);
+
+    // Calculate inner area
+    let inner = popup_area.inner(Margin {
+        horizontal: 2,
+        vertical: 1,
+    });
+
+    // Build form content
+    let mut text_lines = Vec::new();
+
+    // Instructions
+    text_lines.push(Line::from(vec![Span::styled(
+        "Edit comment (dependabot PRs will use @dependabot close):",
+        Style::default().fg(theme.text_secondary),
+    )]));
+    text_lines.push(Line::from(""));
+
+    // Comment field
+    text_lines.push(Line::from(vec![
+        Span::styled(
+            "Comment: ",
+            Style::default()
+                .fg(theme.active_fg)
+                .add_modifier(Modifier::BOLD),
+        ),
+        Span::styled(
+            comment,
+            Style::default().fg(theme.active_fg).bg(theme.active_bg),
+        ),
+    ]));
+
+    text_lines.push(Line::from(""));
+    text_lines.push(Line::from(""));
+
+    // Footer with shortcuts
+    text_lines.push(Line::from(vec![
+        Span::styled(
+            "Enter",
+            Style::default()
+                .fg(theme.accent_primary)
+                .add_modifier(Modifier::BOLD),
+        ),
+        Span::styled(" submit & close  ", Style::default().fg(theme.text_muted)),
+        Span::styled(
+            "Esc/x/q",
             Style::default()
                 .fg(theme.accent_primary)
                 .add_modifier(Modifier::BOLD),
@@ -1059,40 +1144,27 @@ fn render_bootstrap_screen(f: &mut Frame, app: &App) {
         BootstrapState::NotStarted => ("Initializing application...", 0, false),
         BootstrapState::LoadingRepositories => ("Loading repositories...", 25, false),
         BootstrapState::RestoringSession => ("Restoring session...", 50, false),
-        BootstrapState::LoadingPRs => {
-            // Calculate progress with half-credit for loading repos
-            let total_repos = app.store.state().repos.recent_repos.len().max(1);
-
-            let (loading_count, loaded_count) = app
+        BootstrapState::LoadingFirstRepo => {
+            // Loading the selected repo first
+            if let Some(repo) = app
                 .store
                 .state()
                 .repos
-                .repo_data
-                .values()
-                .fold((0, 0), |(loading, loaded), d| {
-                    match d.loading_state {
-                        LoadingState::Loading => (loading + 1, loaded),
-                        LoadingState::Loaded | LoadingState::Error(_) => (loading, loaded + 1),
-                        _ => (loading, loaded),
-                    }
-                });
-
-            // Progress: loaded repos count as 1.0, loading repos count as 0.5
-            // For 5 repos: start loading #1 = 10%, #1 done = 20%, start #2 = 30%, etc.
-            let progress = ((loaded_count * 100) + (loading_count * 50)) / total_repos;
-
-            (
-                &format!(
-                    "Loading pull requests...\n[{}/{}] repositories",
-                    loaded_count,
-                    total_repos
-                )[..],
-                progress,
-                false,
-            )
+                .recent_repos
+                .get(app.store.state().repos.selected_repo)
+            {
+                (&format!("Loading {}...", repo.repo)[..], 75, false)
+            } else {
+                ("Loading repository...", 75, false)
+            }
+        }
+        BootstrapState::UIReady
+        | BootstrapState::LoadingRemainingRepos
+        | BootstrapState::Completed => {
+            // This state shouldn't be shown in bootstrap screen as UI should be visible
+            unreachable!()
         }
         BootstrapState::Error(err) => (&format!("Error: {}", err)[..], 0, true),
-        BootstrapState::Completed => unreachable!(),
     };
 
     // Title
@@ -1195,7 +1267,9 @@ fn render_debug_console(f: &mut Frame, area: Rect, app: &App) -> usize {
         total_logs.saturating_sub(visible_height)
     } else {
         // Manual scroll: use scroll_offset
-        console_state.scroll_offset.min(total_logs.saturating_sub(visible_height))
+        console_state
+            .scroll_offset
+            .min(total_logs.saturating_sub(visible_height))
     };
 
     // Convert logs to ListItems with color coding
@@ -1224,10 +1298,7 @@ fn render_debug_console(f: &mut Frame, area: Rect, app: &App) -> usize {
 
             let text = format!(
                 "{} {} {} {}",
-                timestamp,
-                level_str,
-                target_short,
-                entry.message
+                timestamp, level_str, target_short, entry.message
             );
 
             ListItem::new(text).style(Style::default().fg(level_color))
@@ -1235,19 +1306,22 @@ fn render_debug_console(f: &mut Frame, area: Rect, app: &App) -> usize {
         .collect();
 
     // Create the list widget
-    let logs_list = List::new(log_items)
-        .block(
-            Block::bordered()
-                .title(format!(
-                    " Debug Console ({}/{}) {} ",
-                    scroll_offset + visible_height.min(total_logs),
-                    log_count,
-                    if console_state.auto_scroll { "[AUTO]" } else { "[MANUAL]" }
-                ))
-                .title_bottom(" `~` Close | j/k Scroll | a Auto-scroll | c Clear ")
-                .border_style(Style::default().fg(theme.accent_primary))
-                .style(Style::default().bg(theme.bg_secondary))
-        );
+    let logs_list = List::new(log_items).block(
+        Block::bordered()
+            .title(format!(
+                " Debug Console ({}/{}) {} ",
+                scroll_offset + visible_height.min(total_logs),
+                log_count,
+                if console_state.auto_scroll {
+                    "[AUTO]"
+                } else {
+                    "[MANUAL]"
+                }
+            ))
+            .title_bottom(" `~` Close | j/k Scroll | a Auto-scroll | c Clear ")
+            .border_style(Style::default().fg(theme.accent_primary))
+            .style(Style::default().bg(theme.bg_secondary)),
+    );
 
     f.render_widget(logs_list, console_area);
 
@@ -1274,6 +1348,7 @@ impl App {
     ) -> App {
         // Initialize Redux store with default state
         let theme = Theme::default();
+
         let initial_state = AppState {
             ui: UiState::default(),
             repos: ReposState {
@@ -1335,8 +1410,6 @@ impl App {
             .recent_repos
             .get(self.store.state().repos.selected_repo)
     }
-
-
 }
 
 pub async fn fetch_github_data<'a>(
@@ -1372,7 +1445,7 @@ pub async fn fetch_github_data<'a>(
             if prs.len() >= MAX_PRS {
                 break;
             }
-            let pr = Pr::from_pull_request(&pr, repo, &octocrab).await;
+            let pr = Pr::from_pull_request(&pr, repo, octocrab).await;
             prs.push(pr);
         }
 
@@ -1392,15 +1465,22 @@ pub async fn fetch_github_data<'a>(
 
 fn handle_events(
     show_add_repo: bool,
+    show_close_pr: bool,
     log_panel_open: bool,
     job_list_focused: bool,
     debug_console_open: bool,
     pending_key_shared: &std::sync::Arc<std::sync::Mutex<Option<crate::state::PendingKeyPress>>>,
 ) -> Result<Action> {
     Ok(match event::read()? {
-        Event::Key(key) if key.kind == KeyEventKind::Press => {
-            handle_key_event(key, show_add_repo, log_panel_open, job_list_focused, debug_console_open, pending_key_shared)
-        }
+        Event::Key(key) if key.kind == KeyEventKind::Press => handle_key_event(
+            key,
+            show_add_repo,
+            show_close_pr,
+            log_panel_open,
+            job_list_focused,
+            debug_console_open,
+            pending_key_shared,
+        ),
         _ => Action::None,
     })
 }
@@ -1408,12 +1488,36 @@ fn handle_events(
 fn handle_key_event(
     key: KeyEvent,
     show_add_repo: bool,
+    show_close_pr: bool,
     log_panel_open: bool,
     job_list_focused: bool,
     debug_console_open: bool,
     pending_key_shared: &std::sync::Arc<std::sync::Mutex<Option<crate::state::PendingKeyPress>>>,
 ) -> Action {
-    // Handle add repo popup keys first if popup is open
+    // Handle close PR popup keys first if popup is open
+    if show_close_pr {
+        match key.code {
+            // Close popup: Esc, x, q
+            KeyCode::Esc => return Action::HideClosePrPopup,
+            KeyCode::Char('x') | KeyCode::Char('q')
+                if !key.modifiers.contains(KeyModifiers::CONTROL) =>
+            {
+                return Action::HideClosePrPopup;
+            }
+            // Submit: Enter
+            KeyCode::Enter => return Action::ClosePrFormSubmit,
+            // Edit: Backspace
+            KeyCode::Backspace => return Action::ClosePrFormBackspace,
+            // All other characters go into the input field
+            KeyCode::Char(c) if !key.modifiers.contains(KeyModifiers::CONTROL) => {
+                return Action::ClosePrFormInput(c);
+            }
+            // Ignore other keys (arrows, function keys, etc.)
+            _ => return Action::None,
+        }
+    }
+
+    // Handle add repo popup keys if popup is open
     if show_add_repo {
         match key.code {
             KeyCode::Esc => return Action::HideAddRepoPopup,
@@ -1478,6 +1582,37 @@ fn handle_key_event(
             // For all other keys when log panel is open, check if it's a general shortcut
             // (e.g., '?' for help) - fall through to general shortcut handling below
             _ => {}
+        }
+    }
+
+    // Handle double-Esc to clear PR selection (before other Esc handling)
+    // This needs to happen before popup/panel-specific Esc handling
+    if !show_add_repo && !show_close_pr && !log_panel_open && !debug_console_open {
+        if key.code == KeyCode::Esc {
+            // Check if there's a pending Esc key (represented as '\x1b')
+            let pending_guard = pending_key_shared.lock().unwrap();
+            let has_pending_esc = pending_guard
+                .as_ref()
+                .filter(|p| p.key == '\x1b' && p.timestamp.elapsed().as_secs() < 3)
+                .is_some();
+            drop(pending_guard);
+
+            if has_pending_esc {
+                // Second Esc press - clear selection
+                let mut pending_guard = pending_key_shared.lock().unwrap();
+                *pending_guard = None;
+                drop(pending_guard);
+                return Action::ClearPrSelection;
+            } else {
+                // First Esc press - set as pending
+                let mut pending_guard = pending_key_shared.lock().unwrap();
+                *pending_guard = Some(crate::state::PendingKeyPress {
+                    key: '\x1b', // Use escape character to represent Esc
+                    timestamp: std::time::Instant::now(),
+                });
+                drop(pending_guard);
+                return Action::None;
+            }
         }
     }
 

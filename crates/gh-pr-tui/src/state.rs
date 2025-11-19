@@ -1,16 +1,10 @@
+use ratatui::widgets::TableState;
 use std::{
     collections::{HashMap, HashSet},
     sync::{Arc, Mutex},
 };
-use ratatui::widgets::TableState;
 
-use crate::{
-    config::Config,
-    log::LogPanel,
-    merge_bot::MergeBot,
-    pr::Pr,
-    theme::Theme,
-};
+use crate::{config::Config, log::LogPanel, merge_bot::MergeBot, pr::Pr, theme::Theme};
 
 /// Root application state following Redux pattern
 #[derive(Debug, Clone)]
@@ -44,6 +38,8 @@ pub struct UiState {
     pub add_repo_form: AddRepoForm,
     /// Shared state for event handler to know if add repo popup is open
     pub show_add_repo_shared: Arc<Mutex<bool>>,
+    /// Close PR popup state (None = hidden, Some = visible with state)
+    pub close_pr_state: Option<ClosePrState>,
     /// Pending key press for two-key combinations (3 second timeout)
     /// Shared with event handler for checking multi-key shortcuts
     pub pending_key: Arc<Mutex<Option<PendingKeyPress>>>,
@@ -64,6 +60,20 @@ pub enum AddRepoField {
     Org,
     Repo,
     Branch,
+}
+
+/// State for the close PR popup/view
+#[derive(Debug, Clone)]
+pub struct ClosePrState {
+    pub comment: String,
+}
+
+impl ClosePrState {
+    pub fn new() -> Self {
+        Self {
+            comment: "Not needed anymore".to_string(),
+        }
+    }
 }
 
 /// Repository and PR state
@@ -92,13 +102,13 @@ pub struct LogPanelState {
 }
 
 /// Merge bot state (wrapper around existing MergeBot)
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct MergeBotState {
     pub bot: MergeBot,
 }
 
 /// Background task status state
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct TaskState {
     pub status: Option<TaskStatus>,
 }
@@ -108,7 +118,7 @@ pub struct TaskState {
 pub struct DebugConsoleState {
     pub is_open: bool,
     pub scroll_offset: usize,
-    pub auto_scroll: bool, // Follow new logs as they arrive
+    pub auto_scroll: bool,   // Follow new logs as they arrive
     pub height_percent: u16, // Height as percentage of screen (30-70)
     pub logs: crate::log_capture::LogBuffer,
     pub viewport_height: usize, // Updated during rendering for page down
@@ -150,7 +160,7 @@ impl PrNumber {
 pub struct RepoData {
     pub prs: Vec<Pr>,
     pub table_state: TableState,
-    pub selected_pr_numbers: HashSet<PrNumber>,  // Type-safe PR numbers
+    pub selected_pr_numbers: HashSet<PrNumber>, // Type-safe PR numbers
     pub loading_state: LoadingState,
     pub auto_merge_queue: Vec<AutoMergePR>,
     pub operation_monitor_queue: Vec<OperationMonitor>,
@@ -250,7 +260,9 @@ pub enum BootstrapState {
     NotStarted,
     LoadingRepositories,
     RestoringSession,
-    LoadingPRs,
+    LoadingFirstRepo,      // Loading the selected repo from session
+    UIReady,               // First repo loaded, UI can be shown
+    LoadingRemainingRepos, // Loading other repos in background
     Completed,
     Error(String),
 }
@@ -320,6 +332,7 @@ impl Default for UiState {
             show_add_repo: false,
             add_repo_form: AddRepoForm::default(),
             show_add_repo_shared: Arc::new(Mutex::new(false)),
+            close_pr_state: None,
             pending_key: Arc::new(Mutex::new(None)),
         }
     }
@@ -348,20 +361,6 @@ impl Default for LogPanelState {
             log_panel_open_shared: Arc::new(Mutex::new(false)),
             job_list_focused_shared: Arc::new(Mutex::new(true)), // Start with job list focused
         }
-    }
-}
-
-impl Default for MergeBotState {
-    fn default() -> Self {
-        Self {
-            bot: MergeBot::new(),
-        }
-    }
-}
-
-impl Default for TaskState {
-    fn default() -> Self {
-        Self { status: None }
     }
 }
 

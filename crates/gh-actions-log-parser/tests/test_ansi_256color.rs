@@ -1,5 +1,5 @@
 // We'll use the parser indirectly through parse_workflow_logs
-use gh_actions_log_parser::{parse_workflow_logs, job_log_to_tree};
+use gh_actions_log_parser::parse_workflow_logs;
 use std::io::Write;
 
 #[test]
@@ -20,7 +20,9 @@ fn test_256_color_parsing() {
     let job_log = &parsed.jobs[0];
 
     // Find the line with the error
-    let error_line = job_log.lines.iter()
+    let error_line = job_log
+        .lines
+        .iter()
         .find(|line| line.display_content.contains("error[E0425]"))
         .expect("Should find error line");
 
@@ -35,18 +37,23 @@ fn test_256_color_parsing() {
     }
 
     // The "error[E0425]" text should NOT have strikethrough
-    let error_segment = segments.iter()
+    let error_segment = segments
+        .iter()
         .find(|s| s.text.contains("error"))
         .expect("Should find 'error' segment");
 
     println!("\n✅ Verification:");
     println!("  Strikethrough disabled to avoid 256-color conflicts");
-    println!("  error[E0425] segment has strikethrough={}", error_segment.style.strikethrough);
+    println!(
+        "  error[E0425] segment has strikethrough={}",
+        error_segment.style.strikethrough
+    );
 
-    assert!(!error_segment.style.strikethrough,
-        "error[E0425] should NOT have strikethrough");
+    assert!(
+        !error_segment.style.strikethrough,
+        "error[E0425] should NOT have strikethrough"
+    );
 
     // Should have bold attribute
-    assert!(error_segment.style.bold,
-        "error[E0425] should be bold");
+    assert!(error_segment.style.bold, "error[E0425] should be bold");
 }

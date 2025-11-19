@@ -135,20 +135,20 @@ impl MergeableStatus {
     }
 }
 
-impl Into<Row<'static>> for &Pr {
-    fn into(self) -> Row<'static> {
+impl From<&Pr> for Row<'static> {
+    fn from(val: &Pr) -> Self {
         use ratatui::style::Style;
         use ratatui::widgets::Cell;
 
         // Show status with icon and label (e.g., "✓ Ready", "✗ Build Failed")
-        let status_text = format!("{} {}", self.mergeable.icon(), self.mergeable.label());
+        let status_text = format!("{} {}", val.mergeable.icon(), val.mergeable.label());
 
         Row::new(vec![
-            Cell::from(self.number.to_string()),
-            Cell::from(self.title.clone()),
-            Cell::from(self.author.clone()),
-            Cell::from(self.no_comments.to_string()),
-            Cell::from(status_text).style(Style::default().fg(self.mergeable.color())),
+            Cell::from(val.number.to_string()),
+            Cell::from(val.title.clone()),
+            Cell::from(val.author.clone()),
+            Cell::from(val.no_comments.to_string()),
+            Cell::from(status_text).style(Style::default().fg(val.mergeable.color())),
         ])
     }
 }

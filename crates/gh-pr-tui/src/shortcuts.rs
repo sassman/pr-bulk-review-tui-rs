@@ -21,9 +21,11 @@ pub enum Action {
     TogglePrSelection,
     NavigateToNextPr,
     NavigateToPreviousPr,
+    ClearPrSelection,
     MergeSelectedPrs,
     ApprovePrs,
     StartMergeBot,
+    MergeBotTick, // Internal action for merge bot processing
     OpenCurrentPrInBrowser,
     OpenBuildLogs,
     OpenInIDE,
@@ -60,6 +62,13 @@ pub enum Action {
     AddRepoFormNextField,
     AddRepoFormSubmit,
 
+    // Close PR popup
+    ShowClosePrPopup,
+    HideClosePrPopup,
+    ClosePrFormInput(char),
+    ClosePrFormBackspace,
+    ClosePrFormSubmit,
+
     // Repository management
     DeleteCurrentRepo,
 
@@ -82,6 +91,7 @@ pub enum Action {
     MergeComplete(Result<(), String>),
     RerunJobsComplete(Result<(), String>),
     ApprovalComplete(Result<(), String>),
+    ClosePrComplete(Result<(), String>),
     PRMergedConfirmed(usize, usize, bool), // repo_index, pr_number, is_merged
     BuildLogsLoaded(Vec<(crate::log::JobMetadata, gh_actions_log_parser::JobLog)>, crate::log::PrContext),
     IDEOpenComplete(Result<(), String>),
@@ -305,6 +315,15 @@ pub fn get_shortcuts() -> Vec<ShortcutCategory> {
                     action: Action::OpenCurrentPrInBrowser,
                     matcher: ShortcutMatcher::SingleKey(|key| matches!(key.code, KeyCode::Enter)),
                 },
+                Shortcut {
+                    key_display: "c",
+                    description: "Close selected PRs",
+                    action: Action::ShowClosePrPopup,
+                    matcher: ShortcutMatcher::SingleKey(|key| {
+                        matches!(key.code, KeyCode::Char('c'))
+                            && !key.modifiers.contains(KeyModifiers::CONTROL)
+                    }),
+                },
             ],
         },
         ShortcutCategory {
@@ -453,6 +472,12 @@ pub fn get_shortcuts() -> Vec<ShortcutCategory> {
                     }),
                 },
                 Shortcut {
+                    key_display: "Esc → Esc",
+                    description: "Clear all PR selections",
+                    action: Action::ClearPrSelection,
+                    matcher: ShortcutMatcher::SingleKey(|_| false), // Handled specially in main.rs
+                },
+                Shortcut {
                     key_display: "p → a",
                     description: "Add new repository",
                     action: Action::ShowAddRepoPopup,
@@ -541,12 +566,11 @@ pub fn find_action_for_key_with_pending(
 /// Find action for a single key press (no two-key combination logic)
 fn find_single_key_action(key: &KeyEvent, current_char: Option<char>) -> Action {
     // Handle special cases for number keys (repo selection)
-    if let Some(c) = current_char {
-        if c.is_ascii_digit() && c != '0' {
+    if let Some(c) = current_char
+        && c.is_ascii_digit() && c != '0' {
             let index = c.to_digit(10).unwrap() as usize - 1;
             return Action::SelectRepoByIndex(index);
         }
-    }
 
     // Handle up/down separately since they map to different actions
     match key.code {
