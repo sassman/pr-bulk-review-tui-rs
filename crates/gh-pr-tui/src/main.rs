@@ -1585,33 +1585,37 @@ fn handle_key_event(
 
     // Handle double-Esc to clear PR selection (before other Esc handling)
     // This needs to happen before popup/panel-specific Esc handling
-    if !show_add_repo && !show_close_pr && !log_panel_open && !debug_console_open
-        && key.code == KeyCode::Esc {
-            // Check if there's a pending Esc key (represented as '\x1b')
-            let pending_guard = pending_key_shared.lock().unwrap();
-            let has_pending_esc = pending_guard
-                .as_ref()
-                .filter(|p| p.key == '\x1b' && p.timestamp.elapsed().as_secs() < 3)
-                .is_some();
-            drop(pending_guard);
+    if !show_add_repo
+        && !show_close_pr
+        && !log_panel_open
+        && !debug_console_open
+        && key.code == KeyCode::Esc
+    {
+        // Check if there's a pending Esc key (represented as '\x1b')
+        let pending_guard = pending_key_shared.lock().unwrap();
+        let has_pending_esc = pending_guard
+            .as_ref()
+            .filter(|p| p.key == '\x1b' && p.timestamp.elapsed().as_secs() < 3)
+            .is_some();
+        drop(pending_guard);
 
-            if has_pending_esc {
-                // Second Esc press - clear selection
-                let mut pending_guard = pending_key_shared.lock().unwrap();
-                *pending_guard = None;
-                drop(pending_guard);
-                return Action::ClearPrSelection;
-            } else {
-                // First Esc press - set as pending
-                let mut pending_guard = pending_key_shared.lock().unwrap();
-                *pending_guard = Some(crate::state::PendingKeyPress {
-                    key: '\x1b', // Use escape character to represent Esc
-                    timestamp: std::time::Instant::now(),
-                });
-                drop(pending_guard);
-                return Action::None;
-            }
+        if has_pending_esc {
+            // Second Esc press - clear selection
+            let mut pending_guard = pending_key_shared.lock().unwrap();
+            *pending_guard = None;
+            drop(pending_guard);
+            return Action::ClearPrSelection;
+        } else {
+            // First Esc press - set as pending
+            let mut pending_guard = pending_key_shared.lock().unwrap();
+            *pending_guard = Some(crate::state::PendingKeyPress {
+                key: '\x1b', // Use escape character to represent Esc
+                timestamp: std::time::Instant::now(),
+            });
+            drop(pending_guard);
+            return Action::None;
         }
+    }
 
     // Handle debug console keys if console is open (before general shortcuts)
     if debug_console_open {

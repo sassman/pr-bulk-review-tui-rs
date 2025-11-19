@@ -31,7 +31,7 @@ pub enum Action {
     SelectPrevJob,
     FocusJobList,
     FocusLogViewer,
-    ToggleTreeNode,  // Toggle expand/collapse at cursor
+    ToggleTreeNode, // Toggle expand/collapse at cursor
     // Log panel - log viewer scrolling
     ScrollLogPanelUp,
     ScrollLogPanelDown,
@@ -41,10 +41,10 @@ pub enum Action {
     // Log panel - step and error navigation
     NextStep,
     PrevStep,
-    NextError,        // Jump to next step/job with errors
-    PrevError,        // Jump to previous step/job with errors
-    NextLogSection,   // Error navigation (kept for backwards compat)
-    PrevLogSection,   // Error navigation (kept for backwards compat)
+    NextError,      // Jump to next step/job with errors
+    PrevError,      // Jump to previous step/job with errors
+    NextLogSection, // Error navigation (kept for backwards compat)
+    PrevLogSection, // Error navigation (kept for backwards compat)
     ToggleTimestamps,
     ToggleShortcuts,
     ScrollShortcutsUp,
@@ -89,7 +89,10 @@ pub enum Action {
     ApprovalComplete(Result<(), String>),
     ClosePrComplete(Result<(), String>),
     PRMergedConfirmed(usize, usize, bool), // repo_index, pr_number, is_merged
-    BuildLogsLoaded(Vec<(crate::log::JobMetadata, gh_actions_log_parser::JobLog)>, crate::log::PrContext),
+    BuildLogsLoaded(
+        Vec<(crate::log::JobMetadata, gh_actions_log_parser::JobLog)>,
+        crate::log::PrContext,
+    ),
     IDEOpenComplete(Result<(), String>),
 
     // Auto-merge queue management
@@ -99,7 +102,7 @@ pub enum Action {
 
     // Operation monitoring (rebase/merge progress tracking)
     StartOperationMonitor(usize, usize, crate::state::OperationType), // repo_index, pr_number, operation
-    OperationMonitorCheck(usize, usize),  // repo_index, pr_number - periodic check
+    OperationMonitorCheck(usize, usize), // repo_index, pr_number - periodic check
     RemoveFromOperationMonitor(usize, usize), // repo_index, pr_number
 
     // Debug console (Quake-style drop-down)

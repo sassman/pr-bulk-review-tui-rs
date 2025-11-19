@@ -1,8 +1,5 @@
-use ratatui::{
-    prelude::*,
-    widgets::*,
-};
 use gh_actions_log_parser::{AnsiStyle, Color as ParserColor, JobLog, NamedColor, StyledSegment};
+use ratatui::{prelude::*, widgets::*};
 use std::time::Duration;
 
 /// Job execution status
@@ -43,12 +40,12 @@ impl JobStatus {
 /// Metadata for a single build job
 #[derive(Debug, Clone)]
 pub struct JobMetadata {
-    pub name: String,           // Full job name (e.g., "lint (macos-latest, clippy)")
-    pub workflow_name: String,  // Workflow name (e.g., "CI")
-    pub status: JobStatus,      // Success/Failure/etc
-    pub error_count: usize,     // Number of errors found
+    pub name: String,          // Full job name (e.g., "lint (macos-latest, clippy)")
+    pub workflow_name: String, // Workflow name (e.g., "CI")
+    pub status: JobStatus,     // Success/Failure/etc
+    pub error_count: usize,    // Number of errors found
     pub duration: Option<Duration>, // Job duration
-    pub html_url: String,       // GitHub URL to job
+    pub html_url: String,      // GitHub URL to job
 }
 
 #[derive(Debug, Clone)]
@@ -92,13 +89,17 @@ pub struct PrContext {
 /// Render the log panel as a card overlay with PR context header
 /// Takes the available area (excluding top tabs and bottom panels)
 /// Returns the calculated viewport height for page down scrolling
-pub fn render_log_panel_card(f: &mut Frame, panel: &LogPanel, theme: &crate::theme::Theme, available_area: Rect) -> usize {
+pub fn render_log_panel_card(
+    f: &mut Frame,
+    panel: &LogPanel,
+    theme: &crate::theme::Theme,
+    available_area: Rect,
+) -> usize {
     // Use Clear widget to completely clear the underlying content
     f.render_widget(Clear, available_area);
 
     // Then render a solid background to ensure complete coverage
-    let background = Block::default()
-        .style(Style::default().bg(theme.bg_panel));
+    let background = Block::default().style(Style::default().bg(theme.bg_panel));
     f.render_widget(background, available_area);
 
     // Use the full available area (same dimensions as PR panel)
@@ -109,7 +110,7 @@ pub fn render_log_panel_card(f: &mut Frame, panel: &LogPanel, theme: &crate::the
         .direction(Direction::Vertical)
         .constraints([
             Constraint::Length(3), // PR context header
-            Constraint::Min(0),     // Log content
+            Constraint::Min(0),    // Log content
         ])
         .split(card_area);
 
@@ -155,7 +156,12 @@ pub fn render_log_panel_card(f: &mut Frame, panel: &LogPanel, theme: &crate::the
 /// Render the log panel showing build failure logs using a Table widget
 /// OPTIMIZED: Only renders visible lines (viewport-based rendering)
 /// Returns the visible viewport height for page down scrolling
-fn render_log_panel_content(f: &mut Frame, panel: &LogPanel, area: Rect, theme: &crate::theme::Theme) -> usize {
+fn render_log_panel_content(
+    f: &mut Frame,
+    panel: &LogPanel,
+    area: Rect,
+    theme: &crate::theme::Theme,
+) -> usize {
     if panel.workflows.is_empty() {
         let empty_msg = Paragraph::new("No build logs found")
             .block(
@@ -175,7 +181,12 @@ fn render_log_panel_content(f: &mut Frame, panel: &LogPanel, area: Rect, theme: 
 }
 
 /// Render the tree view of workflows/jobs/steps
-fn render_log_tree(f: &mut Frame, panel: &LogPanel, area: Rect, theme: &crate::theme::Theme) -> usize {
+fn render_log_tree(
+    f: &mut Frame,
+    panel: &LogPanel,
+    area: Rect,
+    theme: &crate::theme::Theme,
+) -> usize {
     let visible_height = area.height.saturating_sub(2) as usize;
 
     // Build tree rows
@@ -194,7 +205,9 @@ fn render_log_tree(f: &mut Frame, panel: &LogPanel, area: Rect, theme: &crate::t
         let row_text = build_tree_row(panel, path, theme);
 
         let style = if is_cursor {
-            Style::default().bg(theme.selected_bg).fg(theme.text_primary)
+            Style::default()
+                .bg(theme.selected_bg)
+                .fg(theme.text_primary)
         } else {
             Style::default().bg(theme.bg_panel).fg(theme.text_primary)
         };
@@ -206,7 +219,10 @@ fn render_log_tree(f: &mut Frame, panel: &LogPanel, area: Rect, theme: &crate::t
         .block(
             Block::default()
                 .borders(Borders::ALL)
-                .title(format!(" Build Logs - PR #{} | j/k: navigate, Enter: toggle, n: next error, x: close ", panel.pr_context.number))
+                .title(format!(
+                    " Build Logs - PR #{} | j/k: navigate, Enter: toggle, n: next error, x: close ",
+                    panel.pr_context.number
+                ))
                 .border_style(Style::default().fg(theme.accent_primary))
                 .style(Style::default().bg(theme.bg_panel)),
         )
@@ -228,7 +244,7 @@ fn build_tree_row(panel: &LogPanel, path: &[usize], theme: &crate::theme::Theme)
             let has_children = !workflow.jobs.is_empty();
             let expanded = panel.is_expanded(path);
             let icon = if !has_children {
-                " "  // No icon if no children
+                " " // No icon if no children
             } else if expanded {
                 "▼"
             } else {
@@ -241,7 +257,10 @@ fn build_tree_row(panel: &LogPanel, path: &[usize], theme: &crate::theme::Theme)
                 String::new()
             };
 
-            Line::from(format!("{}{} {} {}{}", indent, icon, status_icon, workflow.name, error_info))
+            Line::from(format!(
+                "{}{} {} {}{}",
+                indent, icon, status_icon, workflow.name, error_info
+            ))
         }
         2 => {
             // Job node
@@ -250,7 +269,7 @@ fn build_tree_row(panel: &LogPanel, path: &[usize], theme: &crate::theme::Theme)
             let has_children = !job.steps.is_empty();
             let expanded = panel.is_expanded(path);
             let icon = if !has_children {
-                " "  // No icon if no children
+                " " // No icon if no children
             } else if expanded {
                 "▼"
             } else {
@@ -281,7 +300,10 @@ fn build_tree_row(panel: &LogPanel, path: &[usize], theme: &crate::theme::Theme)
                 String::new()
             };
 
-            Line::from(format!("{}├─ {} {} {}{}{}", indent, icon, status_icon, job.name, error_info, duration_info))
+            Line::from(format!(
+                "{}├─ {} {} {}{}{}",
+                indent, icon, status_icon, job.name, error_info, duration_info
+            ))
         }
         3 => {
             // Step node
@@ -291,7 +313,7 @@ fn build_tree_row(panel: &LogPanel, path: &[usize], theme: &crate::theme::Theme)
             let has_children = !step.lines.is_empty();
             let expanded = panel.is_expanded(path);
             let icon = if !has_children {
-                " "  // No icon if no children
+                " " // No icon if no children
             } else if expanded {
                 "▼"
             } else {
@@ -304,7 +326,10 @@ fn build_tree_row(panel: &LogPanel, path: &[usize], theme: &crate::theme::Theme)
                 String::new()
             };
 
-            Line::from(format!("{}│  ├─ {} {}{}{}", indent, icon, status_icon, step.name, error_info))
+            Line::from(format!(
+                "{}│  ├─ {} {}{}{}",
+                indent, icon, status_icon, step.name, error_info
+            ))
         }
         4 => {
             // Log line (leaf node - no icon)
@@ -325,7 +350,10 @@ fn build_tree_row(panel: &LogPanel, path: &[usize], theme: &crate::theme::Theme)
 
             // Determine line style based on type
             let line_style = if is_error {
-                Style::default().fg(theme.status_error).add_modifier(Modifier::BOLD).bg(theme.bg_panel)
+                Style::default()
+                    .fg(theme.status_error)
+                    .add_modifier(Modifier::BOLD)
+                    .bg(theme.bg_panel)
             } else if line.is_command {
                 // Style command invocations in yellow
                 Style::default().fg(Color::Yellow).bg(theme.bg_panel)
@@ -339,7 +367,10 @@ fn build_tree_row(panel: &LogPanel, path: &[usize], theme: &crate::theme::Theme)
             } else {
                 // Fallback to plain text
                 let text = if panel.horizontal_scroll > 0 {
-                    line.display_content.chars().skip(panel.horizontal_scroll).collect::<String>()
+                    line.display_content
+                        .chars()
+                        .skip(panel.horizontal_scroll)
+                        .collect::<String>()
                 } else {
                     line.display_content.clone()
                 };
@@ -348,16 +379,20 @@ fn build_tree_row(panel: &LogPanel, path: &[usize], theme: &crate::theme::Theme)
 
             // Add tree indentation prefix
             let prefix = format!("{}│     ", indent);
-            let mut spans = vec![Span::styled(prefix, Style::default().fg(theme.text_muted).bg(theme.bg_panel))];
+            let mut spans = vec![Span::styled(
+                prefix,
+                Style::default().fg(theme.text_muted).bg(theme.bg_panel),
+            )];
 
             // Add timestamp if enabled and available
             if panel.show_timestamps
-                && let Some(ref timestamp) = line.timestamp {
-                    spans.push(Span::styled(
-                        format!("[{}] ", timestamp),
-                        Style::default().fg(theme.text_muted).bg(theme.bg_panel),
-                    ));
-                }
+                && let Some(ref timestamp) = line.timestamp
+            {
+                spans.push(Span::styled(
+                    format!("[{}] ", timestamp),
+                    Style::default().fg(theme.text_muted).bg(theme.bg_panel),
+                ));
+            }
 
             spans.extend(content.spans);
             Line::from(spans)
@@ -430,7 +465,11 @@ fn convert_style(ansi_style: &AnsiStyle, base_style: Style) -> Style {
 }
 
 /// Convert styled segments to ratatui Line with proper styling
-fn styled_segments_to_line(segments: &[StyledSegment], base_style: Style, h_scroll: usize) -> Line<'static> {
+fn styled_segments_to_line(
+    segments: &[StyledSegment],
+    base_style: Style,
+    h_scroll: usize,
+) -> Line<'static> {
     if segments.is_empty() {
         return Line::from("");
     }
@@ -471,14 +510,16 @@ pub fn create_log_panel_from_jobs(
     use std::collections::HashMap;
 
     // Group jobs by workflow name and convert to tree using parser
-    let mut workflows_map: HashMap<String, Vec<(JobMetadata, gh_actions_log_parser::JobNode)>> = HashMap::new();
+    let mut workflows_map: HashMap<String, Vec<(JobMetadata, gh_actions_log_parser::JobNode)>> =
+        HashMap::new();
     let mut job_metadata_map: HashMap<String, JobMetadata> = HashMap::new();
 
     for (metadata, job_log) in jobs {
         let job_node = gh_actions_log_parser::job_log_to_tree(job_log);
 
         // Filter out jobs with no logs AND "/system" in name
-        let has_logs = !job_node.steps.is_empty() && job_node.steps.iter().any(|step| !step.lines.is_empty());
+        let has_logs =
+            !job_node.steps.is_empty() && job_node.steps.iter().any(|step| !step.lines.is_empty());
         let has_system = job_node.name.contains("/system");
 
         // Skip this job if it has no logs AND has /system in name
@@ -499,7 +540,8 @@ pub fn create_log_panel_from_jobs(
     let mut workflows: Vec<gh_actions_log_parser::WorkflowNode> = workflows_map
         .into_iter()
         .map(|(workflow_name, jobs)| {
-            let mut job_nodes: Vec<gh_actions_log_parser::JobNode> = jobs.into_iter().map(|(_, job)| job).collect();
+            let mut job_nodes: Vec<gh_actions_log_parser::JobNode> =
+                jobs.into_iter().map(|(_, job)| job).collect();
 
             // Sort jobs alphabetically by name
             job_nodes.sort_by(|a, b| a.name.cmp(&b.name));
@@ -518,7 +560,9 @@ pub fn create_log_panel_from_jobs(
 
     // Sort workflows: failed first, then by name
     workflows.sort_by(|a, b| {
-        b.has_failures.cmp(&a.has_failures).then(a.name.cmp(&b.name))
+        b.has_failures
+            .cmp(&a.has_failures)
+            .then(a.name.cmp(&b.name))
     });
 
     // Auto-expand workflows (top level) and nodes with errors
@@ -564,16 +608,17 @@ impl LogPanel {
 
         // Find current position in flattened list
         if let Some(current_idx) = visible.iter().position(|path| path == &self.cursor_path)
-            && current_idx < visible.len() - 1 {
-                let new_idx = current_idx + 1;
-                self.cursor_path = visible[new_idx].clone();
+            && current_idx < visible.len() - 1
+        {
+            let new_idx = current_idx + 1;
+            self.cursor_path = visible[new_idx].clone();
 
-                // Auto-scroll to keep cursor visible
-                let max_visible_idx = self.scroll_offset + self.viewport_height.saturating_sub(1);
-                if new_idx > max_visible_idx {
-                    self.scroll_offset = new_idx.saturating_sub(self.viewport_height.saturating_sub(1));
-                }
+            // Auto-scroll to keep cursor visible
+            let max_visible_idx = self.scroll_offset + self.viewport_height.saturating_sub(1);
+            if new_idx > max_visible_idx {
+                self.scroll_offset = new_idx.saturating_sub(self.viewport_height.saturating_sub(1));
             }
+        }
     }
 
     /// Navigate up to previous visible tree node
@@ -585,15 +630,16 @@ impl LogPanel {
 
         // Find current position in flattened list
         if let Some(current_idx) = visible.iter().position(|path| path == &self.cursor_path)
-            && current_idx > 0 {
-                let new_idx = current_idx - 1;
-                self.cursor_path = visible[new_idx].clone();
+            && current_idx > 0
+        {
+            let new_idx = current_idx - 1;
+            self.cursor_path = visible[new_idx].clone();
 
-                // Auto-scroll to keep cursor visible
-                if new_idx < self.scroll_offset {
-                    self.scroll_offset = new_idx;
-                }
+            // Auto-scroll to keep cursor visible
+            if new_idx < self.scroll_offset {
+                self.scroll_offset = new_idx;
             }
+        }
     }
 
     /// Toggle expand/collapse at cursor
@@ -661,42 +707,45 @@ impl LogPanel {
             // Get the step to check for error lines
             if let Some(workflow) = self.workflows.get(step_path[0])
                 && let Some(job) = workflow.jobs.get(step_path[1])
-                    && let Some(step) = job.steps.get(step_path[2]) {
-                        // Check if step is expanded (has visible lines)
-                        if self.is_expanded(step_path) {
-                            let start_line_idx = if self.cursor_path.len() == 4 {
-                                self.cursor_path[3] + 1 // Start after current line
-                            } else {
-                                0 // Start from first line if at step level
-                            };
+                && let Some(step) = job.steps.get(step_path[2])
+            {
+                // Check if step is expanded (has visible lines)
+                if self.is_expanded(step_path) {
+                    let start_line_idx = if self.cursor_path.len() == 4 {
+                        self.cursor_path[3] + 1 // Start after current line
+                    } else {
+                        0 // Start from first line if at step level
+                    };
 
-                            // Find next error line in this step
-                            for (line_idx, line) in step.lines.iter().enumerate().skip(start_line_idx) {
-                                let is_error = if let Some(ref cmd) = line.command {
-                                    matches!(cmd, gh_actions_log_parser::WorkflowCommand::Error { .. })
-                                } else {
-                                    line.display_content.to_lowercase().contains("error:")
-                                };
+                    // Find next error line in this step
+                    for (line_idx, line) in step.lines.iter().enumerate().skip(start_line_idx) {
+                        let is_error = if let Some(ref cmd) = line.command {
+                            matches!(cmd, gh_actions_log_parser::WorkflowCommand::Error { .. })
+                        } else {
+                            line.display_content.to_lowercase().contains("error:")
+                        };
 
-                                if is_error {
-                                    // Found error line in current step
-                                    let new_path = vec![step_path[0], step_path[1], step_path[2], line_idx];
-                                    let visible = self.flatten_visible_nodes();
-                                    if let Some(idx) = visible.iter().position(|path| path == &new_path) {
-                                        self.cursor_path = new_path;
-                                        // Auto-scroll to keep cursor visible
-                                        let max_visible_idx = self.scroll_offset + self.viewport_height.saturating_sub(1);
-                                        if idx > max_visible_idx {
-                                            self.scroll_offset = idx.saturating_sub(self.viewport_height.saturating_sub(1));
-                                        } else if idx < self.scroll_offset {
-                                            self.scroll_offset = idx;
-                                        }
-                                    }
-                                    return;
+                        if is_error {
+                            // Found error line in current step
+                            let new_path = vec![step_path[0], step_path[1], step_path[2], line_idx];
+                            let visible = self.flatten_visible_nodes();
+                            if let Some(idx) = visible.iter().position(|path| path == &new_path) {
+                                self.cursor_path = new_path;
+                                // Auto-scroll to keep cursor visible
+                                let max_visible_idx =
+                                    self.scroll_offset + self.viewport_height.saturating_sub(1);
+                                if idx > max_visible_idx {
+                                    self.scroll_offset =
+                                        idx.saturating_sub(self.viewport_height.saturating_sub(1));
+                                } else if idx < self.scroll_offset {
+                                    self.scroll_offset = idx;
                                 }
                             }
+                            return;
                         }
                     }
+                }
+            }
         }
 
         // No more error lines in current step, jump to next step/job with errors
@@ -713,9 +762,11 @@ impl LogPanel {
                 if error_paths.contains(path) {
                     self.cursor_path = path.clone();
                     // Auto-scroll to keep cursor visible
-                    let max_visible_idx = self.scroll_offset + self.viewport_height.saturating_sub(1);
+                    let max_visible_idx =
+                        self.scroll_offset + self.viewport_height.saturating_sub(1);
                     if idx > max_visible_idx {
-                        self.scroll_offset = idx.saturating_sub(self.viewport_height.saturating_sub(1));
+                        self.scroll_offset =
+                            idx.saturating_sub(self.viewport_height.saturating_sub(1));
                     } else if idx < self.scroll_offset {
                         self.scroll_offset = idx;
                     }
@@ -726,11 +777,12 @@ impl LogPanel {
 
         // Wrap to first error
         if let Some(first_error) = error_paths.first()
-            && let Some(idx) = visible.iter().position(|path| path == first_error) {
-                self.cursor_path = first_error.clone();
-                // Auto-scroll to top when wrapping
-                self.scroll_offset = idx;
-            }
+            && let Some(idx) = visible.iter().position(|path| path == first_error)
+        {
+            self.cursor_path = first_error.clone();
+            // Auto-scroll to top when wrapping
+            self.scroll_offset = idx;
+        }
     }
 
     /// Find previous error across entire tree
@@ -744,42 +796,45 @@ impl LogPanel {
             // Get the step to check for error lines
             if let Some(workflow) = self.workflows.get(step_path[0])
                 && let Some(job) = workflow.jobs.get(step_path[1])
-                    && let Some(step) = job.steps.get(step_path[2]) {
-                        // Check if step is expanded (has visible lines)
-                        if self.is_expanded(step_path) {
-                            let end_line_idx = if self.cursor_path.len() == 4 {
-                                self.cursor_path[3] // Current line (exclusive)
-                            } else {
-                                step.lines.len() // All lines if at step level
-                            };
+                && let Some(step) = job.steps.get(step_path[2])
+            {
+                // Check if step is expanded (has visible lines)
+                if self.is_expanded(step_path) {
+                    let end_line_idx = if self.cursor_path.len() == 4 {
+                        self.cursor_path[3] // Current line (exclusive)
+                    } else {
+                        step.lines.len() // All lines if at step level
+                    };
 
-                            // Find previous error line in this step (iterate backwards)
-                            for (line_idx, line) in step.lines.iter().enumerate().take(end_line_idx).rev() {
-                                let is_error = if let Some(ref cmd) = line.command {
-                                    matches!(cmd, gh_actions_log_parser::WorkflowCommand::Error { .. })
-                                } else {
-                                    line.display_content.to_lowercase().contains("error:")
-                                };
+                    // Find previous error line in this step (iterate backwards)
+                    for (line_idx, line) in step.lines.iter().enumerate().take(end_line_idx).rev() {
+                        let is_error = if let Some(ref cmd) = line.command {
+                            matches!(cmd, gh_actions_log_parser::WorkflowCommand::Error { .. })
+                        } else {
+                            line.display_content.to_lowercase().contains("error:")
+                        };
 
-                                if is_error {
-                                    // Found error line in current step
-                                    let new_path = vec![step_path[0], step_path[1], step_path[2], line_idx];
-                                    let visible = self.flatten_visible_nodes();
-                                    if let Some(idx) = visible.iter().position(|path| path == &new_path) {
-                                        self.cursor_path = new_path;
-                                        // Auto-scroll to keep cursor visible
-                                        let max_visible_idx = self.scroll_offset + self.viewport_height.saturating_sub(1);
-                                        if idx > max_visible_idx {
-                                            self.scroll_offset = idx.saturating_sub(self.viewport_height.saturating_sub(1));
-                                        } else if idx < self.scroll_offset {
-                                            self.scroll_offset = idx;
-                                        }
-                                    }
-                                    return;
+                        if is_error {
+                            // Found error line in current step
+                            let new_path = vec![step_path[0], step_path[1], step_path[2], line_idx];
+                            let visible = self.flatten_visible_nodes();
+                            if let Some(idx) = visible.iter().position(|path| path == &new_path) {
+                                self.cursor_path = new_path;
+                                // Auto-scroll to keep cursor visible
+                                let max_visible_idx =
+                                    self.scroll_offset + self.viewport_height.saturating_sub(1);
+                                if idx > max_visible_idx {
+                                    self.scroll_offset =
+                                        idx.saturating_sub(self.viewport_height.saturating_sub(1));
+                                } else if idx < self.scroll_offset {
+                                    self.scroll_offset = idx;
                                 }
                             }
+                            return;
                         }
                     }
+                }
+            }
         }
 
         // No more error lines in current step, jump to previous step/job with errors
@@ -796,9 +851,11 @@ impl LogPanel {
                 if error_paths.contains(path) {
                     self.cursor_path = path.clone();
                     // Auto-scroll to keep cursor visible
-                    let max_visible_idx = self.scroll_offset + self.viewport_height.saturating_sub(1);
+                    let max_visible_idx =
+                        self.scroll_offset + self.viewport_height.saturating_sub(1);
                     if idx > max_visible_idx {
-                        self.scroll_offset = idx.saturating_sub(self.viewport_height.saturating_sub(1));
+                        self.scroll_offset =
+                            idx.saturating_sub(self.viewport_height.saturating_sub(1));
                     } else if idx < self.scroll_offset {
                         self.scroll_offset = idx;
                     }
@@ -809,16 +866,17 @@ impl LogPanel {
 
         // Wrap to last error
         if let Some(last_error) = error_paths.last()
-            && let Some(idx) = visible.iter().position(|path| path == last_error) {
-                self.cursor_path = last_error.clone();
-                // Auto-scroll when wrapping
-                let max_visible_idx = self.scroll_offset + self.viewport_height.saturating_sub(1);
-                if idx > max_visible_idx {
-                    self.scroll_offset = idx.saturating_sub(self.viewport_height.saturating_sub(1));
-                } else if idx < self.scroll_offset {
-                    self.scroll_offset = idx;
-                }
+            && let Some(idx) = visible.iter().position(|path| path == last_error)
+        {
+            self.cursor_path = last_error.clone();
+            // Auto-scroll when wrapping
+            let max_visible_idx = self.scroll_offset + self.viewport_height.saturating_sub(1);
+            if idx > max_visible_idx {
+                self.scroll_offset = idx.saturating_sub(self.viewport_height.saturating_sub(1));
+            } else if idx < self.scroll_offset {
+                self.scroll_offset = idx;
             }
+        }
     }
 
     /// Collect all tree paths that have errors
@@ -841,5 +899,4 @@ impl LogPanel {
 
         result
     }
-
 }

@@ -17,7 +17,10 @@ fn default_ide_command() -> String {
 }
 
 fn default_temp_dir() -> String {
-    env::temp_dir().join("gh-pr-tui").to_string_lossy().to_string()
+    env::temp_dir()
+        .join("gh-pr-tui")
+        .to_string_lossy()
+        .to_string()
 }
 
 fn default_approval_message() -> String {

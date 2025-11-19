@@ -106,11 +106,12 @@ fn parse_job_log(job_name: &str, content: &str) -> JobLog {
         let (timestamp, line_content) = extract_timestamp(raw_line);
 
         // Check for [command] prefix and remove it
-        let (is_command, line_after_command_prefix) = if let Some(stripped) = line_content.strip_prefix("[command]") {
-            (true, stripped) // Remove "[command]" prefix
-        } else {
-            (false, line_content)
-        };
+        let (is_command, line_after_command_prefix) =
+            if let Some(stripped) = line_content.strip_prefix("[command]") {
+                (true, stripped) // Remove "[command]" prefix
+            } else {
+                (false, line_content)
+            };
 
         // Parse ANSI codes to get styled segments
         let styled_segments = parse_ansi_line(line_after_command_prefix);
@@ -181,21 +182,22 @@ pub fn job_log_to_tree(job_log: JobLog) -> crate::types::JobNode {
         // Check for step boundaries - only GroupStart creates a new step
         // GroupEnd is just metadata, actual content continues after it
         if let Some(ref cmd) = line.command
-            && let WorkflowCommand::GroupStart { title } = cmd {
-                // Save previous step if exists
-                if let Some(step_name) = current_step_name.take() {
-                    let error_count = count_step_errors(&current_step_lines);
-                    steps.push(crate::types::StepNode {
-                        name: step_name,
-                        lines: current_step_lines.clone(),
-                        error_count,
-                    });
-                    current_step_lines.clear();
-                }
-
-                // Start new step
-                current_step_name = Some(title.clone());
+            && let WorkflowCommand::GroupStart { title } = cmd
+        {
+            // Save previous step if exists
+            if let Some(step_name) = current_step_name.take() {
+                let error_count = count_step_errors(&current_step_lines);
+                steps.push(crate::types::StepNode {
+                    name: step_name,
+                    lines: current_step_lines.clone(),
+                    error_count,
+                });
+                current_step_lines.clear();
             }
+
+            // Start new step
+            current_step_name = Some(title.clone());
+        }
 
         // Add non-metadata lines to current step
         // This includes all lines AFTER ##[endgroup] until next ##[group]
@@ -249,7 +251,8 @@ fn count_step_errors(lines: &[LogLine]) -> usize {
 /// Returns (timestamp, content) where timestamp is Some if found, None otherwise.
 fn extract_timestamp(line: &str) -> (Option<String>, &str) {
     // Check if line starts with ISO 8601 timestamp
-    if line.len() >= 28 {  // Minimum length for timestamp: "2024-01-15T10:30:00.123456Z"
+    if line.len() >= 28 {
+        // Minimum length for timestamp: "2024-01-15T10:30:00.123456Z"
         let chars: Vec<char> = line.chars().collect();
         if chars.len() >= 28
             && chars[4] == '-'
@@ -268,7 +271,8 @@ fn extract_timestamp(line: &str) -> (Option<String>, &str) {
             } else if let Some(pos) = line.find('Z') {
                 // 'Z' at end of line (empty line case)
                 // Verify this is actually the timestamp 'Z' by checking position
-                if (20..30).contains(&pos) {  // 'Z' should be around position 20-29 in timestamp
+                if (20..30).contains(&pos) {
+                    // 'Z' should be around position 20-29 in timestamp
                     let timestamp = line[..=pos].to_string(); // Include the 'Z'
                     let content = &line[pos + 1..]; // Everything after 'Z' (should be empty or whitespace)
                     return (Some(timestamp), content);
@@ -351,22 +355,13 @@ mod tests {
         assert_eq!(tracker.current_group(), (0, None));
 
         tracker.enter_group("Build".to_string());
-        assert_eq!(
-            tracker.current_group(),
-            (1, Some("Build".to_string()))
-        );
+        assert_eq!(tracker.current_group(), (1, Some("Build".to_string())));
 
         tracker.enter_group("Tests".to_string());
-        assert_eq!(
-            tracker.current_group(),
-            (2, Some("Tests".to_string()))
-        );
+        assert_eq!(tracker.current_group(), (2, Some("Tests".to_string())));
 
         tracker.exit_group();
-        assert_eq!(
-            tracker.current_group(),
-            (1, Some("Build".to_string()))
-        );
+        assert_eq!(tracker.current_group(), (1, Some("Build".to_string())));
 
         tracker.exit_group();
         assert_eq!(tracker.current_group(), (0, None));
@@ -381,27 +376,15 @@ mod tests {
         );
 
         // Test removing .txt only
-        assert_eq!(
-            clean_job_name("build.txt"),
-            "build"
-        );
+        assert_eq!(clean_job_name("build.txt"), "build");
 
         // Test removing number prefix only
-        assert_eq!(
-            clean_job_name("1_test"),
-            "test"
-        );
+        assert_eq!(clean_job_name("1_test"), "test");
 
         // Test no changes needed
-        assert_eq!(
-            clean_job_name("my-job"),
-            "my-job"
-        );
+        assert_eq!(clean_job_name("my-job"), "my-job");
 
         // Test underscore in job name (not a number prefix)
-        assert_eq!(
-            clean_job_name("my_job.txt"),
-            "my_job"
-        );
+        assert_eq!(clean_job_name("my_job.txt"), "my_job");
     }
 }

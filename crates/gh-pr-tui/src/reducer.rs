@@ -10,75 +10,94 @@ pub fn reduce(mut state: AppState, action: &Action) -> (AppState, Vec<Effect>) {
     if let Action::MergeBotTick = action {
         // Process merge bot queue if bot is running
         if state.merge_bot.bot.is_running()
-            && let Some(repo) = state.repos.recent_repos.get(state.repos.selected_repo).cloned() {
-                let repo_data = state.repos.repo_data
-                    .get(&state.repos.selected_repo)
-                    .cloned()
-                    .unwrap_or_default();
+            && let Some(repo) = state
+                .repos
+                .recent_repos
+                .get(state.repos.selected_repo)
+                .cloned()
+        {
+            let repo_data = state
+                .repos
+                .repo_data
+                .get(&state.repos.selected_repo)
+                .cloned()
+                .unwrap_or_default();
 
-                // Process next PR in queue
-                if let Some(bot_action) = state.merge_bot.bot.process_next(&repo_data.prs) {
-                    use crate::merge_bot::MergeBotAction;
-                    match bot_action {
-                        MergeBotAction::DispatchMerge(_indices) => {
-                            effects.push(Effect::PerformMerge {
-                                repo: repo.clone(),
-                                prs: repo_data.prs.clone(),
-                            });
-                            effects.push(Effect::DispatchAction(Action::SetTaskStatus(Some(TaskStatus {
+            // Process next PR in queue
+            if let Some(bot_action) = state.merge_bot.bot.process_next(&repo_data.prs) {
+                use crate::merge_bot::MergeBotAction;
+                match bot_action {
+                    MergeBotAction::DispatchMerge(_indices) => {
+                        effects.push(Effect::PerformMerge {
+                            repo: repo.clone(),
+                            prs: repo_data.prs.clone(),
+                        });
+                        effects.push(Effect::DispatchAction(Action::SetTaskStatus(Some(
+                            TaskStatus {
                                 message: state.merge_bot.bot.status_message(),
                                 status_type: TaskStatusType::Running,
-                            }))));
-                        }
-                        MergeBotAction::DispatchRebase(_indices) => {
-                            effects.push(Effect::PerformRebase {
-                                repo: repo.clone(),
-                                prs: repo_data.prs.clone(),
-                            });
-                            effects.push(Effect::DispatchAction(Action::SetTaskStatus(Some(TaskStatus {
+                            },
+                        ))));
+                    }
+                    MergeBotAction::DispatchRebase(_indices) => {
+                        effects.push(Effect::PerformRebase {
+                            repo: repo.clone(),
+                            prs: repo_data.prs.clone(),
+                        });
+                        effects.push(Effect::DispatchAction(Action::SetTaskStatus(Some(
+                            TaskStatus {
                                 message: state.merge_bot.bot.status_message(),
                                 status_type: TaskStatusType::Running,
-                            }))));
-                        }
-                        MergeBotAction::WaitForCI(_pr_number) => {
-                            effects.push(Effect::DispatchAction(Action::SetTaskStatus(Some(TaskStatus {
+                            },
+                        ))));
+                    }
+                    MergeBotAction::WaitForCI(_pr_number) => {
+                        effects.push(Effect::DispatchAction(Action::SetTaskStatus(Some(
+                            TaskStatus {
                                 message: state.merge_bot.bot.status_message(),
                                 status_type: TaskStatusType::Running,
-                            }))));
-                        }
-                        MergeBotAction::PollMergeStatus(pr_number, is_checking_ci) => {
-                            effects.push(Effect::PollPRMergeStatus {
-                                repo_index: state.repos.selected_repo,
-                                repo: repo.clone(),
-                                pr_number,
-                                is_checking_ci,
-                            });
-                            effects.push(Effect::DispatchAction(Action::SetTaskStatus(Some(TaskStatus {
+                            },
+                        ))));
+                    }
+                    MergeBotAction::PollMergeStatus(pr_number, is_checking_ci) => {
+                        effects.push(Effect::PollPRMergeStatus {
+                            repo_index: state.repos.selected_repo,
+                            repo: repo.clone(),
+                            pr_number,
+                            is_checking_ci,
+                        });
+                        effects.push(Effect::DispatchAction(Action::SetTaskStatus(Some(
+                            TaskStatus {
                                 message: state.merge_bot.bot.status_message(),
                                 status_type: TaskStatusType::Running,
-                            }))));
-                        }
-                        MergeBotAction::PrSkipped(_pr_number, _reason) => {
-                            effects.push(Effect::DispatchAction(Action::SetTaskStatus(Some(TaskStatus {
+                            },
+                        ))));
+                    }
+                    MergeBotAction::PrSkipped(_pr_number, _reason) => {
+                        effects.push(Effect::DispatchAction(Action::SetTaskStatus(Some(
+                            TaskStatus {
                                 message: state.merge_bot.bot.status_message(),
                                 status_type: TaskStatusType::Running,
-                            }))));
-                        }
-                        MergeBotAction::Completed => {
-                            effects.push(Effect::DispatchAction(Action::SetTaskStatus(Some(TaskStatus {
+                            },
+                        ))));
+                    }
+                    MergeBotAction::Completed => {
+                        effects.push(Effect::DispatchAction(Action::SetTaskStatus(Some(
+                            TaskStatus {
                                 message: state.merge_bot.bot.status_message(),
                                 status_type: TaskStatusType::Success,
-                            }))));
-                            // Refresh the PR list
-                            effects.push(Effect::LoadSingleRepo {
-                                repo_index: state.repos.selected_repo,
-                                repo: repo.clone(),
-                                filter: state.repos.filter.clone(),
-                            });
-                        }
+                            },
+                        ))));
+                        // Refresh the PR list
+                        effects.push(Effect::LoadSingleRepo {
+                            repo_index: state.repos.selected_repo,
+                            repo: repo.clone(),
+                            filter: state.repos.filter.clone(),
+                        });
                     }
                 }
             }
+        }
     }
 
     // Apply each sub-reducer and collect effects
@@ -102,7 +121,8 @@ pub fn reduce(mut state: AppState, action: &Action) -> (AppState, Vec<Effect>) {
     state.task = task_state;
     effects.extend(task_effects);
 
-    let (debug_console_state, debug_console_effects) = debug_console_reducer(state.debug_console, action);
+    let (debug_console_state, debug_console_effects) =
+        debug_console_reducer(state.debug_console, action);
     state.debug_console = debug_console_state;
     effects.extend(debug_console_effects);
 
@@ -313,14 +333,21 @@ fn repos_reducer(
 
         // Repositories loaded - restore session and load PRs
         Action::BootstrapComplete(Ok(result)) => {
-            info!("Bootstrap complete: {} repositories configured, selected: {}", result.repos.len(), result.selected_repo);
+            info!(
+                "Bootstrap complete: {} repositories configured, selected: {}",
+                result.repos.len(),
+                result.selected_repo
+            );
             state.recent_repos = result.repos.clone();
             state.selected_repo = result.selected_repo;
             state.bootstrap_state = BootstrapState::LoadingFirstRepo;
 
             // Load selected repo first for quick UI display
             if let Some(selected_repo) = result.repos.get(result.selected_repo) {
-                info!("Loading selected repo first: {}/{}", selected_repo.org, selected_repo.repo);
+                info!(
+                    "Loading selected repo first: {}/{}",
+                    selected_repo.org, selected_repo.repo
+                );
                 let data = state.repo_data.entry(result.selected_repo).or_default();
                 data.loading_state = LoadingState::Loading;
 
@@ -332,10 +359,12 @@ fn repos_reducer(
                 });
 
                 // Effect: Show status message
-                effects.push(Effect::DispatchAction(Action::SetTaskStatus(Some(TaskStatus {
-                    message: format!("Loading {}...", selected_repo.repo),
-                    status_type: TaskStatusType::Running,
-                }))));
+                effects.push(Effect::DispatchAction(Action::SetTaskStatus(Some(
+                    TaskStatus {
+                        message: format!("Loading {}...", selected_repo.repo),
+                        status_type: TaskStatusType::Running,
+                    },
+                ))));
             } else {
                 // Fallback: load all repos if selected repo doesn't exist
                 state.bootstrap_state = BootstrapState::LoadingRemainingRepos;
@@ -345,7 +374,8 @@ fn repos_reducer(
                 }
 
                 // Collect all repos with their indices
-                let repos_with_indices: Vec<_> = result.repos
+                let repos_with_indices: Vec<_> = result
+                    .repos
                     .iter()
                     .enumerate()
                     .map(|(i, repo)| (i, repo.clone()))
@@ -420,7 +450,7 @@ fn repos_reducer(
                     crate::state::TaskStatus {
                         message: "Repository deleted".to_string(),
                         status_type: crate::state::TaskStatusType::Success,
-                    }
+                    },
                 ))));
             }
         }
@@ -455,7 +485,8 @@ fn repos_reducer(
             // This is critical after filtering or when PRs are closed/merged
             let current_pr_numbers: std::collections::HashSet<_> =
                 data.prs.iter().map(PrNumber::from_pr).collect();
-            data.selected_pr_numbers.retain(|num| current_pr_numbers.contains(num));
+            data.selected_pr_numbers
+                .retain(|num| current_pr_numbers.contains(num));
 
             // Sync legacy fields if this is the selected repo
             if *repo_index == state.selected_repo {
@@ -481,22 +512,34 @@ fn repos_reducer(
             }
 
             // Quick load: Check if this is the first repo loaded (selected repo)
-            if state.bootstrap_state == BootstrapState::LoadingFirstRepo && *repo_index == state.selected_repo {
+            if state.bootstrap_state == BootstrapState::LoadingFirstRepo
+                && *repo_index == state.selected_repo
+            {
                 // First repo loaded - UI is ready to display!
                 state.bootstrap_state = BootstrapState::UIReady;
 
                 // Show success message for first repo
                 if let Some(repo) = state.recent_repos.get(*repo_index) {
-                    info!("First repo loaded: {}/{} ({} PRs)", repo.org, repo.repo, prs.len());
-                    effects.push(Effect::DispatchAction(Action::SetTaskStatus(Some(TaskStatus {
-                        message: format!("{} loaded ({} PRs)", repo.repo, prs.len()),
-                        status_type: TaskStatusType::Success,
-                    }))));
+                    info!(
+                        "First repo loaded: {}/{} ({} PRs)",
+                        repo.org,
+                        repo.repo,
+                        prs.len()
+                    );
+                    effects.push(Effect::DispatchAction(Action::SetTaskStatus(Some(
+                        TaskStatus {
+                            message: format!("{} loaded ({} PRs)", repo.repo, prs.len()),
+                            status_type: TaskStatusType::Success,
+                        },
+                    ))));
                 }
 
                 // Start loading remaining repos in background
                 if state.recent_repos.len() > 1 {
-                    info!("Starting background loading of {} remaining repositories", state.recent_repos.len() - 1);
+                    info!(
+                        "Starting background loading of {} remaining repositories",
+                        state.recent_repos.len() - 1
+                    );
                     state.bootstrap_state = BootstrapState::LoadingRemainingRepos;
 
                     // Mark all other repos as loading
@@ -508,7 +551,8 @@ fn repos_reducer(
                     }
 
                     // Collect repos to load with their indices (all except selected one)
-                    let repos_to_load: Vec<_> = state.recent_repos
+                    let repos_to_load: Vec<_> = state
+                        .recent_repos
                         .iter()
                         .enumerate()
                         .filter(|(i, _)| *i != state.selected_repo)
@@ -527,11 +571,18 @@ fn repos_reducer(
             } else if state.bootstrap_state == BootstrapState::LoadingRemainingRepos {
                 // Show status message for each repo that loads in background
                 if let Some(repo) = state.recent_repos.get(*repo_index) {
-                    info!("Background repo loaded: {}/{} ({} PRs)", repo.org, repo.repo, prs.len());
-                    effects.push(Effect::DispatchAction(Action::SetTaskStatus(Some(TaskStatus {
-                        message: format!("{} loaded ({} PRs)", repo.repo, prs.len()),
-                        status_type: TaskStatusType::Success,
-                    }))));
+                    info!(
+                        "Background repo loaded: {}/{} ({} PRs)",
+                        repo.org,
+                        repo.repo,
+                        prs.len()
+                    );
+                    effects.push(Effect::DispatchAction(Action::SetTaskStatus(Some(
+                        TaskStatus {
+                            message: format!("{} loaded ({} PRs)", repo.repo, prs.len()),
+                            status_type: TaskStatusType::Success,
+                        },
+                    ))));
                 }
             }
 
@@ -546,12 +597,23 @@ fn repos_reducer(
 
             // Effect: Dispatch bootstrap completion
             if all_loaded && state.bootstrap_state == BootstrapState::LoadingRemainingRepos {
-                let loaded_count = state.repo_data.values().filter(|d| matches!(d.loading_state, LoadingState::Loaded)).count();
-                info!("All repositories loaded: {}/{} successful", loaded_count, state.recent_repos.len());
+                let loaded_count = state
+                    .repo_data
+                    .values()
+                    .filter(|d| matches!(d.loading_state, LoadingState::Loaded))
+                    .count();
+                info!(
+                    "All repositories loaded: {}/{} successful",
+                    loaded_count,
+                    state.recent_repos.len()
+                );
                 effects.push(Effect::batch(vec![
                     Effect::DispatchAction(Action::SetBootstrapState(BootstrapState::Completed)),
                     Effect::DispatchAction(Action::SetTaskStatus(Some(TaskStatus {
-                        message: format!("All {} repositories loaded successfully", state.recent_repos.len()),
+                        message: format!(
+                            "All {} repositories loaded successfully",
+                            state.recent_repos.len()
+                        ),
                         status_type: TaskStatusType::Success,
                     }))),
                 ]));
@@ -562,17 +624,24 @@ fn repos_reducer(
             data.loading_state = LoadingState::Error(err.clone());
 
             // Quick load: Check if this is the first repo that failed
-            if state.bootstrap_state == BootstrapState::LoadingFirstRepo && *repo_index == state.selected_repo {
+            if state.bootstrap_state == BootstrapState::LoadingFirstRepo
+                && *repo_index == state.selected_repo
+            {
                 // First repo failed - still show UI but with error message
                 state.bootstrap_state = BootstrapState::UIReady;
 
                 // Show error message for first repo
                 if let Some(repo) = state.recent_repos.get(*repo_index) {
-                    error!("Failed to load first repo {}/{}: {}", repo.org, repo.repo, err);
-                    effects.push(Effect::DispatchAction(Action::SetTaskStatus(Some(TaskStatus {
-                        message: format!("Failed to load {}: {}", repo.repo, err),
-                        status_type: TaskStatusType::Error,
-                    }))));
+                    error!(
+                        "Failed to load first repo {}/{}: {}",
+                        repo.org, repo.repo, err
+                    );
+                    effects.push(Effect::DispatchAction(Action::SetTaskStatus(Some(
+                        TaskStatus {
+                            message: format!("Failed to load {}: {}", repo.repo, err),
+                            status_type: TaskStatusType::Error,
+                        },
+                    ))));
                 }
 
                 // Start loading remaining repos in background (if any)
@@ -588,7 +657,8 @@ fn repos_reducer(
                     }
 
                     // Collect repos to load with their indices (all except selected one)
-                    let repos_to_load: Vec<_> = state.recent_repos
+                    let repos_to_load: Vec<_> = state
+                        .recent_repos
                         .iter()
                         .enumerate()
                         .filter(|(i, _)| *i != state.selected_repo)
@@ -607,11 +677,16 @@ fn repos_reducer(
             } else if state.bootstrap_state == BootstrapState::LoadingRemainingRepos {
                 // Show error message for background repo that failed
                 if let Some(repo) = state.recent_repos.get(*repo_index) {
-                    error!("Failed to load background repo {}/{}: {}", repo.org, repo.repo, err);
-                    effects.push(Effect::DispatchAction(Action::SetTaskStatus(Some(TaskStatus {
-                        message: format!("Failed to load {}: {}", repo.repo, err),
-                        status_type: TaskStatusType::Error,
-                    }))));
+                    error!(
+                        "Failed to load background repo {}/{}: {}",
+                        repo.org, repo.repo, err
+                    );
+                    effects.push(Effect::DispatchAction(Action::SetTaskStatus(Some(
+                        TaskStatus {
+                            message: format!("Failed to load {}: {}", repo.repo, err),
+                            status_type: TaskStatusType::Error,
+                        },
+                    ))));
                 }
             }
 
@@ -626,14 +701,31 @@ fn repos_reducer(
 
             // Effect: Dispatch bootstrap completion if all done
             if all_loaded && state.bootstrap_state == BootstrapState::LoadingRemainingRepos {
-                let loaded_count = state.repo_data.values().filter(|d| matches!(d.loading_state, LoadingState::Loaded)).count();
-                let error_count = state.repo_data.values().filter(|d| matches!(d.loading_state, LoadingState::Error(_))).count();
+                let loaded_count = state
+                    .repo_data
+                    .values()
+                    .filter(|d| matches!(d.loading_state, LoadingState::Loaded))
+                    .count();
+                let error_count = state
+                    .repo_data
+                    .values()
+                    .filter(|d| matches!(d.loading_state, LoadingState::Error(_)))
+                    .count();
 
                 effects.push(Effect::batch(vec![
                     Effect::DispatchAction(Action::SetBootstrapState(BootstrapState::Completed)),
                     Effect::DispatchAction(Action::SetTaskStatus(Some(TaskStatus {
-                        message: format!("Loaded {}/{} repositories ({} failed)", loaded_count, state.recent_repos.len(), error_count),
-                        status_type: if error_count > 0 { TaskStatusType::Warning } else { TaskStatusType::Success },
+                        message: format!(
+                            "Loaded {}/{} repositories ({} failed)",
+                            loaded_count,
+                            state.recent_repos.len(),
+                            error_count
+                        ),
+                        status_type: if error_count > 0 {
+                            TaskStatusType::Warning
+                        } else {
+                            TaskStatusType::Success
+                        },
                     }))),
                 ]));
             }
@@ -688,23 +780,24 @@ fn repos_reducer(
         }
         Action::TogglePrSelection => {
             if let Some(selected) = state.state.selected()
-                && selected < state.prs.len() {
-                    let pr_number = PrNumber::from_pr(&state.prs[selected]);
+                && selected < state.prs.len()
+            {
+                let pr_number = PrNumber::from_pr(&state.prs[selected]);
 
-                    // Update type-safe PR number-based selection (stable across filtering)
-                    if let Some(data) = state.repo_data.get_mut(&state.selected_repo) {
-                        if data.selected_pr_numbers.contains(&pr_number) {
-                            data.selected_pr_numbers.remove(&pr_number);
-                        } else {
-                            data.selected_pr_numbers.insert(pr_number);
-                        }
-                    }
-
-                    // Automatically advance to next PR if not on the last row
-                    if selected < state.prs.len().saturating_sub(1) {
-                        effects.push(Effect::DispatchAction(Action::NavigateToNextPr));
+                // Update type-safe PR number-based selection (stable across filtering)
+                if let Some(data) = state.repo_data.get_mut(&state.selected_repo) {
+                    if data.selected_pr_numbers.contains(&pr_number) {
+                        data.selected_pr_numbers.remove(&pr_number);
+                    } else {
+                        data.selected_pr_numbers.insert(pr_number);
                     }
                 }
+
+                // Automatically advance to next PR if not on the last row
+                if selected < state.prs.len().saturating_sub(1) {
+                    effects.push(Effect::DispatchAction(Action::NavigateToNextPr));
+                }
+            }
         }
         Action::ClearPrSelection => {
             // Clear all PR selections for the current repo
@@ -715,59 +808,66 @@ fn repos_reducer(
         Action::MergeStatusUpdated(repo_index, pr_number, status) => {
             // Update PR status in repo_data
             if let Some(data) = state.repo_data.get_mut(repo_index)
-                && let Some(pr) = data.prs.iter_mut().find(|p| p.number == *pr_number) {
-                    pr.mergeable = *status;
-                }
+                && let Some(pr) = data.prs.iter_mut().find(|p| p.number == *pr_number)
+            {
+                pr.mergeable = *status;
+            }
 
             // Sync legacy fields if this is the selected repo
             if *repo_index == state.selected_repo
-                && let Some(pr) = state.prs.iter_mut().find(|p| p.number == *pr_number) {
-                    pr.mergeable = *status;
-                }
+                && let Some(pr) = state.prs.iter_mut().find(|p| p.number == *pr_number)
+            {
+                pr.mergeable = *status;
+            }
 
             // If status is BuildInProgress, start monitoring the build
             if *status == crate::pr::MergeableStatus::BuildInProgress
-                && let Some(repo) = state.recent_repos.get(*repo_index).cloned() {
-                    // First dispatch action to update state immediately
-                    effects.push(Effect::DispatchAction(Action::StartOperationMonitor(
-                        *repo_index,
-                        *pr_number,
-                        crate::state::OperationType::Rebase,
-                    )));
-                    // Then start background monitoring
-                    effects.push(Effect::StartOperationMonitoring {
-                        repo_index: *repo_index,
-                        repo,
-                        pr_number: *pr_number,
-                        operation: crate::state::OperationType::Rebase,
-                    });
-                }
+                && let Some(repo) = state.recent_repos.get(*repo_index).cloned()
+            {
+                // First dispatch action to update state immediately
+                effects.push(Effect::DispatchAction(Action::StartOperationMonitor(
+                    *repo_index,
+                    *pr_number,
+                    crate::state::OperationType::Rebase,
+                )));
+                // Then start background monitoring
+                effects.push(Effect::StartOperationMonitoring {
+                    repo_index: *repo_index,
+                    repo,
+                    pr_number: *pr_number,
+                    operation: crate::state::OperationType::Rebase,
+                });
+            }
         }
         Action::RebaseStatusUpdated(repo_index, pr_number, needs_rebase) => {
             // Update PR rebase status in repo_data
             if let Some(data) = state.repo_data.get_mut(repo_index)
-                && let Some(pr) = data.prs.iter_mut().find(|p| p.number == *pr_number) {
-                    pr.needs_rebase = *needs_rebase;
-                }
+                && let Some(pr) = data.prs.iter_mut().find(|p| p.number == *pr_number)
+            {
+                pr.needs_rebase = *needs_rebase;
+            }
 
             // Sync legacy fields if this is the selected repo
             if *repo_index == state.selected_repo
-                && let Some(pr) = state.prs.iter_mut().find(|p| p.number == *pr_number) {
-                    pr.needs_rebase = *needs_rebase;
-                }
+                && let Some(pr) = state.prs.iter_mut().find(|p| p.number == *pr_number)
+            {
+                pr.needs_rebase = *needs_rebase;
+            }
         }
         Action::CommentCountUpdated(repo_index, pr_number, comment_count) => {
             // Update PR comment count in repo_data
             if let Some(data) = state.repo_data.get_mut(repo_index)
-                && let Some(pr) = data.prs.iter_mut().find(|p| p.number == *pr_number) {
-                    pr.no_comments = *comment_count;
-                }
+                && let Some(pr) = data.prs.iter_mut().find(|p| p.number == *pr_number)
+            {
+                pr.no_comments = *comment_count;
+            }
 
             // Sync legacy fields if this is the selected repo
             if *repo_index == state.selected_repo
-                && let Some(pr) = state.prs.iter_mut().find(|p| p.number == *pr_number) {
-                    pr.no_comments = *comment_count;
-                }
+                && let Some(pr) = state.prs.iter_mut().find(|p| p.number == *pr_number)
+            {
+                pr.no_comments = *comment_count;
+            }
         }
         Action::MergeComplete(Ok(_)) => {
             // Clear selections after successful merge (only if not in merge bot)
@@ -782,7 +882,10 @@ fn repos_reducer(
             }
 
             // Schedule delayed reload (500ms) to give GitHub time to process the close
-            info!("Scheduling delayed reload after closing PR(s) for repo #{}", state.selected_repo);
+            info!(
+                "Scheduling delayed reload after closing PR(s) for repo #{}",
+                state.selected_repo
+            );
             effects.push(Effect::DelayedRepoReload {
                 repo_index: state.selected_repo,
                 delay_ms: 500,
@@ -864,9 +967,10 @@ fn repos_reducer(
 
                     // Clear selection after starting rebase (if there was a selection)
                     if has_selection
-                        && let Some(data) = state.repo_data.get_mut(&state.selected_repo) {
-                            data.selected_pr_numbers.clear();
-                        }
+                        && let Some(data) = state.repo_data.get_mut(&state.selected_repo)
+                    {
+                        data.selected_pr_numbers.clear();
+                    }
                 }
             }
         }
@@ -1025,9 +1129,10 @@ fn repos_reducer(
 
                     // Clear selection after starting merge operations (if there was a selection)
                     if has_selection
-                        && let Some(data) = state.repo_data.get_mut(&state.selected_repo) {
-                            data.selected_pr_numbers.clear();
-                        }
+                        && let Some(data) = state.repo_data.get_mut(&state.selected_repo)
+                    {
+                        data.selected_pr_numbers.clear();
+                    }
                 }
             }
         }
@@ -1035,16 +1140,17 @@ fn repos_reducer(
             // Effect: Start merge bot with selected PRs
             if let Some(repo) = state.recent_repos.get(state.selected_repo).cloned() {
                 // Use PR numbers for stable selection
-                let prs_to_process: Vec<_> = if let Some(data) = state.repo_data.get(&state.selected_repo) {
-                    state
-                        .prs
-                        .iter()
-                        .filter(|pr| data.selected_pr_numbers.contains(&PrNumber::from_pr(pr)))
-                        .cloned()
-                        .collect()
-                } else {
-                    Vec::new()
-                };
+                let prs_to_process: Vec<_> =
+                    if let Some(data) = state.repo_data.get(&state.selected_repo) {
+                        state
+                            .prs
+                            .iter()
+                            .filter(|pr| data.selected_pr_numbers.contains(&PrNumber::from_pr(pr)))
+                            .cloned()
+                            .collect()
+                    } else {
+                        Vec::new()
+                    };
 
                 if !prs_to_process.is_empty() {
                     effects.push(Effect::StartMergeBot {
@@ -1099,9 +1205,10 @@ fn repos_reducer(
             // Effect: Load build logs for current PR
             if let Some(selected_idx) = state.state.selected()
                 && let Some(pr) = state.prs.get(selected_idx).cloned()
-                    && let Some(repo) = state.recent_repos.get(state.selected_repo).cloned() {
-                        effects.push(Effect::LoadBuildLogs { repo, pr });
-                    }
+                && let Some(repo) = state.recent_repos.get(state.selected_repo).cloned()
+            {
+                effects.push(Effect::LoadBuildLogs { repo, pr });
+            }
         }
         Action::OpenInIDE => {
             // Effect: Open current PR in IDE, or main branch if no PR selected
@@ -1160,12 +1267,8 @@ fn repos_reducer(
                 {
                     // Set the PR status to Rebasing or Merging immediately
                     let status = match operation {
-                        crate::state::OperationType::Rebase => {
-                            crate::pr::MergeableStatus::Rebasing
-                        }
-                        crate::state::OperationType::Merge => {
-                            crate::pr::MergeableStatus::Merging
-                        }
+                        crate::state::OperationType::Rebase => crate::pr::MergeableStatus::Rebasing,
+                        crate::state::OperationType::Merge => crate::pr::MergeableStatus::Merging,
                     };
 
                     // Update PR status in repo_data
@@ -1175,9 +1278,10 @@ fn repos_reducer(
 
                     // Also sync to legacy fields if this is the selected repo
                     if *repo_index == state.selected_repo
-                        && let Some(pr) = state.prs.iter_mut().find(|p| p.number == *pr_number) {
-                            pr.mergeable = status;
-                        }
+                        && let Some(pr) = state.prs.iter_mut().find(|p| p.number == *pr_number)
+                    {
+                        pr.mergeable = status;
+                    }
 
                     // Add to monitoring queue
                     data.operation_monitor_queue
@@ -1208,25 +1312,22 @@ fn repos_reducer(
                     .operation_monitor_queue
                     .iter_mut()
                     .find(|op| op.pr_number == *pr_number)
-                {
-                    monitor.check_count += 1;
+            {
+                monitor.check_count += 1;
 
-                    // Timeout after 40 checks (20 minutes at 30s intervals)
-                    if monitor.check_count >= 40 {
-                        // Remove from queue - timeout reached
-                        data.operation_monitor_queue
-                            .retain(|op| op.pr_number != *pr_number);
-                        effects.push(Effect::DispatchAction(Action::SetTaskStatus(Some(
-                            crate::state::TaskStatus {
-                                message: format!(
-                                    "Operation monitor timeout for PR #{}",
-                                    pr_number
-                                ),
-                                status_type: crate::state::TaskStatusType::Error,
-                            },
-                        ))));
-                    }
+                // Timeout after 40 checks (20 minutes at 30s intervals)
+                if monitor.check_count >= 40 {
+                    // Remove from queue - timeout reached
+                    data.operation_monitor_queue
+                        .retain(|op| op.pr_number != *pr_number);
+                    effects.push(Effect::DispatchAction(Action::SetTaskStatus(Some(
+                        crate::state::TaskStatus {
+                            message: format!("Operation monitor timeout for PR #{}", pr_number),
+                            status_type: crate::state::TaskStatusType::Error,
+                        },
+                    ))));
                 }
+            }
         }
         Action::AddToAutoMergeQueue(repo_index, pr_number) => {
             // Add PR to auto-merge queue
@@ -1259,73 +1360,73 @@ fn repos_reducer(
                     .auto_merge_queue
                     .iter_mut()
                     .find(|pr| pr.pr_number == *pr_number)
-                {
-                    auto_pr.check_count += 1;
+            {
+                auto_pr.check_count += 1;
 
-                    // Check if we've exceeded the time limit (20 minutes = 20 checks at 1 min intervals)
-                    if auto_pr.check_count >= 20 {
-                        // Remove from queue - timeout reached
-                        data.auto_merge_queue
-                            .retain(|pr| pr.pr_number != *pr_number);
-                        effects.push(Effect::DispatchAction(Action::SetTaskStatus(Some(
-                            crate::state::TaskStatus {
-                                message: format!("Auto-merge timeout for PR #{}", pr_number),
-                                status_type: crate::state::TaskStatusType::Error,
-                            },
-                        ))));
-                    } else {
-                        // Check PR status
-                        if let Some(repo) = state.recent_repos.get(*repo_index).cloned() {
-                            // Find the PR to check its status
-                            if let Some(pr) = data.prs.iter().find(|p| p.number == *pr_number) {
-                                match pr.mergeable {
-                                    crate::pr::MergeableStatus::Ready => {
-                                        // PR is ready - trigger merge
-                                        effects.push(Effect::PerformMerge {
-                                            repo: repo.clone(),
-                                            prs: vec![pr.clone()],
-                                        });
-                                        // Remove from queue
-                                        data.auto_merge_queue.retain(|p| p.pr_number != *pr_number);
-                                    }
-                                    crate::pr::MergeableStatus::BuildFailed => {
-                                        // Build failed - stop monitoring
-                                        data.auto_merge_queue.retain(|p| p.pr_number != *pr_number);
-                                        effects.push(Effect::DispatchAction(
-                                            Action::SetTaskStatus(Some(crate::state::TaskStatus {
-                                                message: format!(
-                                                    "Auto-merge stopped: PR #{} build failed",
-                                                    pr_number
-                                                ),
-                                                status_type: crate::state::TaskStatusType::Error,
-                                            })),
-                                        ));
-                                    }
-                                    crate::pr::MergeableStatus::NeedsRebase => {
-                                        // Needs rebase - stop monitoring
-                                        data.auto_merge_queue.retain(|p| p.pr_number != *pr_number);
-                                        effects.push(Effect::DispatchAction(
-                                            Action::SetTaskStatus(Some(crate::state::TaskStatus {
-                                                message: format!(
-                                                    "Auto-merge stopped: PR #{} needs rebase",
-                                                    pr_number
-                                                ),
-                                                status_type: crate::state::TaskStatusType::Error,
-                                            })),
-                                        ));
-                                    }
-                                    crate::pr::MergeableStatus::BuildInProgress => {
-                                        // Still building - schedule next check
-                                        // This will be handled by the background task
-                                    }
-                                    _ => {
-                                        // Unknown or conflicted - continue monitoring
-                                    }
+                // Check if we've exceeded the time limit (20 minutes = 20 checks at 1 min intervals)
+                if auto_pr.check_count >= 20 {
+                    // Remove from queue - timeout reached
+                    data.auto_merge_queue
+                        .retain(|pr| pr.pr_number != *pr_number);
+                    effects.push(Effect::DispatchAction(Action::SetTaskStatus(Some(
+                        crate::state::TaskStatus {
+                            message: format!("Auto-merge timeout for PR #{}", pr_number),
+                            status_type: crate::state::TaskStatusType::Error,
+                        },
+                    ))));
+                } else {
+                    // Check PR status
+                    if let Some(repo) = state.recent_repos.get(*repo_index).cloned() {
+                        // Find the PR to check its status
+                        if let Some(pr) = data.prs.iter().find(|p| p.number == *pr_number) {
+                            match pr.mergeable {
+                                crate::pr::MergeableStatus::Ready => {
+                                    // PR is ready - trigger merge
+                                    effects.push(Effect::PerformMerge {
+                                        repo: repo.clone(),
+                                        prs: vec![pr.clone()],
+                                    });
+                                    // Remove from queue
+                                    data.auto_merge_queue.retain(|p| p.pr_number != *pr_number);
+                                }
+                                crate::pr::MergeableStatus::BuildFailed => {
+                                    // Build failed - stop monitoring
+                                    data.auto_merge_queue.retain(|p| p.pr_number != *pr_number);
+                                    effects.push(Effect::DispatchAction(Action::SetTaskStatus(
+                                        Some(crate::state::TaskStatus {
+                                            message: format!(
+                                                "Auto-merge stopped: PR #{} build failed",
+                                                pr_number
+                                            ),
+                                            status_type: crate::state::TaskStatusType::Error,
+                                        }),
+                                    )));
+                                }
+                                crate::pr::MergeableStatus::NeedsRebase => {
+                                    // Needs rebase - stop monitoring
+                                    data.auto_merge_queue.retain(|p| p.pr_number != *pr_number);
+                                    effects.push(Effect::DispatchAction(Action::SetTaskStatus(
+                                        Some(crate::state::TaskStatus {
+                                            message: format!(
+                                                "Auto-merge stopped: PR #{} needs rebase",
+                                                pr_number
+                                            ),
+                                            status_type: crate::state::TaskStatusType::Error,
+                                        }),
+                                    )));
+                                }
+                                crate::pr::MergeableStatus::BuildInProgress => {
+                                    // Still building - schedule next check
+                                    // This will be handled by the background task
+                                }
+                                _ => {
+                                    // Unknown or conflicted - continue monitoring
                                 }
                             }
                         }
                     }
                 }
+            }
         }
         _ => {}
     }
@@ -1573,7 +1674,10 @@ fn task_reducer(mut state: TaskState, action: &Action) -> (TaskState, Vec<Effect
 }
 
 /// Debug console state reducer - handles debug console actions
-fn debug_console_reducer(mut state: DebugConsoleState, action: &Action) -> (DebugConsoleState, Vec<Effect>) {
+fn debug_console_reducer(
+    mut state: DebugConsoleState,
+    action: &Action,
+) -> (DebugConsoleState, Vec<Effect>) {
     match action {
         Action::ToggleDebugConsole => {
             state.is_open = !state.is_open;

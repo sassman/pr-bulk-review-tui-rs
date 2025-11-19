@@ -65,7 +65,6 @@ impl Shortcut {
             _ => false,
         }
     }
-
 }
 
 /// Get all shortcut definitions organized by category
@@ -254,7 +253,10 @@ pub fn get_shortcuts() -> Vec<ShortcutCategory> {
                     matcher: ShortcutMatcher::SingleKey(|key| {
                         matches!(
                             key.code,
-                            KeyCode::Char('h') | KeyCode::Left | KeyCode::Right | KeyCode::Char('l')
+                            KeyCode::Char('h')
+                                | KeyCode::Left
+                                | KeyCode::Right
+                                | KeyCode::Char('l')
                         )
                     }),
                 },
@@ -278,9 +280,7 @@ pub fn get_shortcuts() -> Vec<ShortcutCategory> {
                     key_display: "Enter",
                     description: "Expand/collapse tree node",
                     action: Action::ToggleTreeNode,
-                    matcher: ShortcutMatcher::SingleKey(|key| {
-                        matches!(key.code, KeyCode::Enter)
-                    }),
+                    matcher: ShortcutMatcher::SingleKey(|key| matches!(key.code, KeyCode::Enter)),
                 },
                 Shortcut {
                     key_display: "t",
@@ -444,10 +444,12 @@ pub fn find_action_for_key_with_pending(
 fn find_single_key_action(key: &KeyEvent, current_char: Option<char>) -> Action {
     // Handle special cases for number keys (repo selection)
     if let Some(c) = current_char
-        && c.is_ascii_digit() && c != '0' {
-            let index = c.to_digit(10).unwrap() as usize - 1;
-            return Action::SelectRepoByIndex(index);
-        }
+        && c.is_ascii_digit()
+        && c != '0'
+    {
+        let index = c.to_digit(10).unwrap() as usize - 1;
+        return Action::SelectRepoByIndex(index);
+    }
 
     // Handle up/down separately since they map to different actions
     match key.code {

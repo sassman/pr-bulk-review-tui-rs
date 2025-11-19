@@ -1,7 +1,4 @@
-use ratatui::{
-    prelude::*,
-    style::palette::tailwind,
-};
+use ratatui::{prelude::*, style::palette::tailwind};
 
 /// Application theme - centralized color and style management
 #[derive(Debug, Clone)]
@@ -41,12 +38,12 @@ pub struct Theme {
     pub action_help: Color,
 
     // Selection colors (Space key toggle)
-    pub selected_bg: Color,      // Background for selected row
-    pub selected_fg: Color,      // Foreground for selected row
+    pub selected_bg: Color, // Background for selected row
+    pub selected_fg: Color, // Foreground for selected row
 
     // Active/focused row colors (keyboard navigation)
-    pub active_bg: Color,        // Background for active/focused row
-    pub active_fg: Color,        // Foreground for active/focused row
+    pub active_bg: Color, // Background for active/focused row
+    pub active_fg: Color, // Foreground for active/focused row
 
     // Table colors
     pub table_header_bg: Color,
@@ -218,9 +215,7 @@ impl Theme {
 
     /// Style for log line numbers/timestamps
     pub fn log_metadata(&self) -> Style {
-        Style::default()
-            .fg(self.text_muted)
-            .bg(self.bg_panel)
+        Style::default().fg(self.text_muted).bg(self.bg_panel)
     }
 
     /// Style for error sections in logs

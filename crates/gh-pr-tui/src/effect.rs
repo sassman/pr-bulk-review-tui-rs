@@ -5,8 +5,9 @@
 use ::log::debug;
 
 use crate::{
-    App, load_persisted_state, loading_recent_repos,
+    App,
     actions::{Action, BootstrapResult},
+    load_persisted_state, loading_recent_repos,
     log::PrContext,
     pr::Pr,
     state::{LoadingState, Repo, TaskStatus, TaskStatusType},
@@ -278,7 +279,14 @@ pub async fn execute_effect(app: &mut App, effect: Effect) -> Result<Vec<Action>
             delay_ms,
         } => {
             // Trigger delayed repo reload using DelayedTask wrapper
-            if let Some(repo) = app.store.state().repos.recent_repos.get(repo_index).cloned() {
+            if let Some(repo) = app
+                .store
+                .state()
+                .repos
+                .recent_repos
+                .get(repo_index)
+                .cloned()
+            {
                 let filter = app.store.state().repos.filter.clone();
                 let _ = app.task_tx.send(BackgroundTask::DelayedTask {
                     task: Box::new(BackgroundTask::LoadSingleRepo {

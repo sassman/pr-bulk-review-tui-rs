@@ -50,7 +50,11 @@ impl DebugConsoleLogger {
                 .build()
         };
 
-        Self { logs, env_logger, console_filter }
+        Self {
+            logs,
+            env_logger,
+            console_filter,
+        }
     }
 
     /// Create a new empty log buffer
@@ -121,8 +125,7 @@ pub fn init_logger() -> LogBuffer {
     let logs = DebugConsoleLogger::create_buffer();
     let logger = DebugConsoleLogger::new(logs.clone());
 
-    log::set_boxed_logger(Box::new(logger))
-        .expect("Failed to initialize logger");
+    log::set_boxed_logger(Box::new(logger)).expect("Failed to initialize logger");
 
     // Set max level based on env_logger configuration
     log::set_max_level(log::LevelFilter::Debug);

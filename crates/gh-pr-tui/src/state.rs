@@ -7,8 +7,7 @@ use std::{
 use crate::{config::Config, log::LogPanel, merge_bot::MergeBot, pr::Pr, theme::Theme};
 
 /// Root application state following Redux pattern
-#[derive(Debug, Clone)]
-#[derive(Default)]
+#[derive(Debug, Clone, Default)]
 pub struct AppState {
     pub ui: UiState,
     pub repos: ReposState,

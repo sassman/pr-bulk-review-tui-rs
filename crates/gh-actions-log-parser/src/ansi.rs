@@ -193,7 +193,10 @@ mod tests {
             Some(Color::Named(NamedColor::Red))
         ));
         // Find the "normal" text segment
-        let normal_segment = segments.iter().find(|s| s.text.contains("normal")).expect("Should have normal text");
+        let normal_segment = segments
+            .iter()
+            .find(|s| s.text.contains("normal"))
+            .expect("Should have normal text");
         assert_eq!(normal_segment.text.trim(), "normal");
     }
 }

@@ -122,10 +122,7 @@ impl MergeBot {
                     completed,
                     queue.len(),
                     failed,
-                    queue
-                        .get(*current_index)
-                        .map(|p| p.pr_number)
-                        .unwrap_or(0)
+                    queue.get(*current_index).map(|p| p.pr_number).unwrap_or(0)
                 )
             }
             MergeBotState::Completed { merged, failed } => {
@@ -338,20 +335,21 @@ impl MergeBot {
             current_index,
             operation: Operation::WaitForMergeConfirmation,
         } = &self.state
-            && queue[*current_index].pr_number == pr_number {
-                if is_merged {
-                    // PR is confirmed merged, mark as complete and move to next
-                    let mut new_queue = queue.clone();
-                    new_queue[*current_index].status = PrQueueStatus::Merged;
-                    self.state = MergeBotState::ProcessingQueue {
-                        queue: new_queue,
-                        current_index: current_index + 1,
-                    };
-                } else {
-                    // Still waiting for merge to be confirmed, keep polling
-                    // State remains the same
-                }
+            && queue[*current_index].pr_number == pr_number
+        {
+            if is_merged {
+                // PR is confirmed merged, mark as complete and move to next
+                let mut new_queue = queue.clone();
+                new_queue[*current_index].status = PrQueueStatus::Merged;
+                self.state = MergeBotState::ProcessingQueue {
+                    queue: new_queue,
+                    current_index: current_index + 1,
+                };
+            } else {
+                // Still waiting for merge to be confirmed, keep polling
+                // State remains the same
             }
+        }
     }
 
     /// Handle PR status update - check if we can proceed after waiting for CI
@@ -361,47 +359,48 @@ impl MergeBot {
             current_index,
             operation: Operation::CheckCI,
         } = &self.state
-            && queue[*current_index].pr_number == pr_number {
-                match status {
-                    MergeableStatus::Ready => {
-                        // CI passed, go back to processing to merge
-                        self.state = MergeBotState::ProcessingQueue {
-                            queue: queue.clone(),
-                            current_index: *current_index,
-                        };
-                    }
-                    MergeableStatus::BuildFailed => {
-                        // CI failed, skip this PR
-                        let mut new_queue = queue.clone();
-                        new_queue[*current_index].status =
-                            PrQueueStatus::Failed("Build failed".to_string());
-                        self.state = MergeBotState::ProcessingQueue {
-                            queue: new_queue,
-                            current_index: current_index + 1,
-                        };
-                    }
-                    MergeableStatus::NeedsRebase => {
-                        // After merge, PR needs rebase again
-                        self.state = MergeBotState::ProcessingQueue {
-                            queue: queue.clone(),
-                            current_index: *current_index,
-                        };
-                    }
-                    _ => {
-                        // Still waiting...
-                    }
+            && queue[*current_index].pr_number == pr_number
+        {
+            match status {
+                MergeableStatus::Ready => {
+                    // CI passed, go back to processing to merge
+                    self.state = MergeBotState::ProcessingQueue {
+                        queue: queue.clone(),
+                        current_index: *current_index,
+                    };
+                }
+                MergeableStatus::BuildFailed => {
+                    // CI failed, skip this PR
+                    let mut new_queue = queue.clone();
+                    new_queue[*current_index].status =
+                        PrQueueStatus::Failed("Build failed".to_string());
+                    self.state = MergeBotState::ProcessingQueue {
+                        queue: new_queue,
+                        current_index: current_index + 1,
+                    };
+                }
+                MergeableStatus::NeedsRebase => {
+                    // After merge, PR needs rebase again
+                    self.state = MergeBotState::ProcessingQueue {
+                        queue: queue.clone(),
+                        current_index: *current_index,
+                    };
+                }
+                _ => {
+                    // Still waiting...
                 }
             }
+        }
     }
 }
 
 /// Actions that the merge bot wants to dispatch
 #[derive(Debug, Clone)]
 pub enum MergeBotAction {
-    DispatchMerge(Vec<usize>),      // PR indices to merge
-    DispatchRebase(Vec<usize>),     // PR indices to rebase
-    WaitForCI(usize),               // PR number
-    PollMergeStatus(usize, bool),   // PR number, is_checking_ci - start polling to confirm merge
-    PrSkipped(usize, String),       // PR number, reason
+    DispatchMerge(Vec<usize>),    // PR indices to merge
+    DispatchRebase(Vec<usize>),   // PR indices to rebase
+    WaitForCI(usize),             // PR number
+    PollMergeStatus(usize, bool), // PR number, is_checking_ci - start polling to confirm merge
+    PrSkipped(usize, String),     // PR number, reason
     Completed,
 }

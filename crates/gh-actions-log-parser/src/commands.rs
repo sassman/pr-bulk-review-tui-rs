@@ -50,18 +50,27 @@ fn parse_legacy_command(line: &str) -> Option<(WorkflowCommand, String)> {
         "endgroup" => WorkflowCommand::GroupEnd,
         "error" => {
             let params = parse_params(params_str.unwrap_or(""));
-            WorkflowCommand::Error { message: message.clone(), params }
+            WorkflowCommand::Error {
+                message: message.clone(),
+                params,
+            }
         }
         "warning" => {
             let params = parse_params(params_str.unwrap_or(""));
-            WorkflowCommand::Warning { message: message.clone(), params }
+            WorkflowCommand::Warning {
+                message: message.clone(),
+                params,
+            }
         }
         "debug" => WorkflowCommand::Debug {
             message: message.clone(),
         },
         "notice" => {
             let params = parse_params(params_str.unwrap_or(""));
-            WorkflowCommand::Notice { message: message.clone(), params }
+            WorkflowCommand::Notice {
+                message: message.clone(),
+                params,
+            }
         }
         _ => return None, // Unknown command
     };
@@ -88,27 +97,21 @@ fn parse_hash_bracket_command(line: &str) -> Option<(WorkflowCommand, String)> {
             title: message.clone(),
         },
         "endgroup" => WorkflowCommand::GroupEnd,
-        "error" => {
-            WorkflowCommand::Error {
-                message: message.clone(),
-                params: CommandParams::default(),
-            }
-        }
-        "warning" => {
-            WorkflowCommand::Warning {
-                message: message.clone(),
-                params: CommandParams::default(),
-            }
-        }
+        "error" => WorkflowCommand::Error {
+            message: message.clone(),
+            params: CommandParams::default(),
+        },
+        "warning" => WorkflowCommand::Warning {
+            message: message.clone(),
+            params: CommandParams::default(),
+        },
         "debug" => WorkflowCommand::Debug {
             message: message.clone(),
         },
-        "notice" => {
-            WorkflowCommand::Notice {
-                message: message.clone(),
-                params: CommandParams::default(),
-            }
-        }
+        "notice" => WorkflowCommand::Notice {
+            message: message.clone(),
+            params: CommandParams::default(),
+        },
         _ => return None, // Unknown command
     };
 
@@ -288,7 +291,10 @@ mod tests {
         assert!(result.is_some());
         let (cmd, msg) = result.unwrap();
         if let WorkflowCommand::Debug { message } = cmd {
-            assert_eq!(message, "/opt/homebrew/bin/git init /Users/runner/work/repo");
+            assert_eq!(
+                message,
+                "/opt/homebrew/bin/git init /Users/runner/work/repo"
+            );
         } else {
             panic!("Expected Debug command (for [command] prefix)");
         }

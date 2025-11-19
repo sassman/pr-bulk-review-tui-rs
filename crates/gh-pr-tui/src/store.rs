@@ -1,9 +1,4 @@
-use crate::{
-    actions::Action,
-    effect::Effect,
-    reducer::reduce,
-    state::AppState,
-};
+use crate::{actions::Action, effect::Effect, reducer::reduce, state::AppState};
 
 /// Redux-style Store that holds application state and dispatches actions
 ///

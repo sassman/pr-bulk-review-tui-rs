@@ -20,17 +20,16 @@
 //! # Ok::<(), Box<dyn std::error::Error>>(())
 //! ```
 
-mod types;
 mod ansi;
 mod commands;
 mod parser;
+mod types;
 
+pub use parser::{job_log_to_tree, parse_workflow_logs};
 pub use types::*;
-pub use parser::{parse_workflow_logs, job_log_to_tree};
 
 #[cfg(test)]
 mod tests {
-    
 
     #[test]
     fn test_basic_parsing() {
