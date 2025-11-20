@@ -876,7 +876,7 @@ fn repos_reducer(
                 data.selected_pr_numbers = data
                     .prs
                     .iter()
-                    .map(|pr| crate::state::PrNumber::from_pr(pr))
+                    .map(crate::state::PrNumber::from_pr)
                     .collect();
             }
         }
