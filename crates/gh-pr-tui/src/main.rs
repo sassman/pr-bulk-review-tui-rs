@@ -1775,7 +1775,10 @@ pub async fn fetch_github_data_cached(
 
     // Skip cache if disabled or bypassed
     if !ApiCache::is_enabled() || bypass_cache {
-        debug!("Cache bypassed, fetching fresh data for {}/{}", repo.org, repo.repo);
+        debug!(
+            "Cache bypassed, fetching fresh data for {}/{}",
+            repo.org, repo.repo
+        );
         return fetch_github_data(octocrab, repo, filter).await;
     }
 
@@ -1795,11 +1798,16 @@ pub async fn fetch_github_data_cached(
 
     if let Some(cached_response) = cached {
         // Try to parse cached body
-        match serde_json::from_str::<Vec<octocrab::models::pulls::PullRequest>>(&cached_response.body) {
+        match serde_json::from_str::<Vec<octocrab::models::pulls::PullRequest>>(
+            &cached_response.body,
+        ) {
             Ok(prs_data) => {
                 debug!(
                     "Cache HIT for {}/{}: {} PRs (status: {})",
-                    repo.org, repo.repo, prs_data.len(), cached_response.status_code
+                    repo.org,
+                    repo.repo,
+                    prs_data.len(),
+                    cached_response.status_code
                 );
 
                 // Convert to our Pr type (without fetching additional details)
@@ -1831,7 +1839,10 @@ pub async fn fetch_github_data_cached(
                 return Ok(prs);
             }
             Err(e) => {
-                debug!("Failed to parse cached response for {}/{}: {}", repo.org, repo.repo, e);
+                debug!(
+                    "Failed to parse cached response for {}/{}: {}",
+                    repo.org, repo.repo, e
+                );
                 // Cache entry is corrupted, invalidate it and fetch fresh
                 let mut cache_guard = cache.lock().unwrap();
                 cache_guard.invalidate("GET", &url, &params);
@@ -1840,7 +1851,10 @@ pub async fn fetch_github_data_cached(
     }
 
     // Cache miss or invalid - fetch fresh data
-    debug!("Cache MISS for {}/{}, fetching from API", repo.org, repo.repo);
+    debug!(
+        "Cache MISS for {}/{}, fetching from API",
+        repo.org, repo.repo
+    );
     let prs = fetch_github_data(octocrab, repo, filter).await?;
 
     // Cache the response for next time

@@ -4,12 +4,12 @@
 //! frequent app restarts (common during development). Responses are
 //! cached with a 20-minute TTL and support ETags for efficient validation.
 
+use ::log::{debug, warn};
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
-use ::log::{debug, warn};
 
 /// GitHub API response cache
 #[derive(Debug)]
@@ -59,7 +59,10 @@ impl ApiCache {
 
         let entries = if cache_file.exists() {
             Self::load_from_disk(&cache_file).unwrap_or_else(|e| {
-                warn!("Failed to load cache file: {}, starting with empty cache", e);
+                warn!(
+                    "Failed to load cache file: {}, starting with empty cache",
+                    e
+                );
                 HashMap::new()
             })
         } else {
@@ -352,8 +355,12 @@ mod tests {
 
     #[test]
     fn test_cache_ttl() {
-        let mut cache = ApiCache::default();
-        cache.ttl_seconds = 2; // 2 second TTL for test
+        let cache_file = PathBuf::from(".cache/test-ttl.json");
+        let mut cache = ApiCache {
+            cache_file,
+            ttl_seconds: 2, // 2 second TTL for test
+            entries: HashMap::new(),
+        };
 
         let response = CachedResponse {
             body: "test".into(),
@@ -394,7 +401,12 @@ mod tests {
 
     #[test]
     fn test_cache_invalidate_pattern() {
-        let mut cache = ApiCache::default();
+        let cache_file = PathBuf::from(".cache/test-pattern.json");
+        let mut cache = ApiCache {
+            cache_file,
+            ttl_seconds: 20 * 60,
+            entries: HashMap::new(),
+        };
 
         let response = CachedResponse {
             body: "test".into(),
@@ -423,8 +435,12 @@ mod tests {
 
     #[test]
     fn test_cache_touch() {
-        let mut cache = ApiCache::default();
-        cache.ttl_seconds = 2;
+        let cache_file = PathBuf::from(".cache/test-touch.json");
+        let mut cache = ApiCache {
+            cache_file,
+            ttl_seconds: 2,
+            entries: HashMap::new(),
+        };
 
         let response = CachedResponse {
             body: "test".into(),
@@ -450,8 +466,12 @@ mod tests {
 
     #[test]
     fn test_cache_stats() {
-        let mut cache = ApiCache::default();
-        cache.ttl_seconds = 1;
+        let cache_file = PathBuf::from(".cache/test-stats.json");
+        let mut cache = ApiCache {
+            cache_file,
+            ttl_seconds: 1,
+            entries: HashMap::new(),
+        };
 
         let response = CachedResponse {
             body: "test".into(),

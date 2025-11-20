@@ -209,9 +209,10 @@ async fn process_task(task: BackgroundTask, result_tx: &mut mpsc::UnboundedSende
                 let cache = cache.clone();
 
                 let task = tokio::spawn(async move {
-                    let result = crate::fetch_github_data_cached(&octocrab, &repo, &filter, &cache, false)
-                        .await
-                        .map_err(|e| e.to_string());
+                    let result =
+                        crate::fetch_github_data_cached(&octocrab, &repo, &filter, &cache, false)
+                            .await
+                            .map_err(|e| e.to_string());
                     (index, result)
                 });
                 tasks.push(task);
