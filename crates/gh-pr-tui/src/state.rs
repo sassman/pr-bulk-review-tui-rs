@@ -133,6 +133,8 @@ pub struct ReposState {
 #[derive(Debug, Clone)]
 pub struct LogPanelState {
     pub panel: Option<LogPanel>,
+    /// Cached view model (recomputed when panel changes)
+    pub view_model: Option<crate::view_models::log_panel::LogPanelViewModel>,
     /// Shared state for event handler to know if log panel is open
     pub log_panel_open_shared: Arc<Mutex<bool>>,
     /// Shared state for event handler to know if job list has focus
@@ -384,6 +386,7 @@ impl Default for LogPanelState {
     fn default() -> Self {
         Self {
             panel: None,
+            view_model: None,
             log_panel_open_shared: Arc::new(Mutex::new(false)),
             job_list_focused_shared: Arc::new(Mutex::new(true)), // Start with job list focused
         }

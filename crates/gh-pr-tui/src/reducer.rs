@@ -110,7 +110,7 @@ pub fn reduce(mut state: AppState, action: &Action) -> (AppState, Vec<Effect>) {
     state.repos = repos_state;
     effects.extend(repos_effects);
 
-    let (log_panel_state, log_panel_effects) = log_panel_reducer(state.log_panel, action);
+    let (log_panel_state, log_panel_effects) = log_panel_reducer(state.log_panel, action, &state.theme);
     state.log_panel = log_panel_state;
     effects.extend(log_panel_effects);
 
@@ -1537,17 +1537,24 @@ fn repos_reducer(
 }
 
 /// Log panel state reducer
-fn log_panel_reducer(mut state: LogPanelState, action: &Action) -> (LogPanelState, Vec<Effect>) {
+fn log_panel_reducer(
+    mut state: LogPanelState,
+    action: &Action,
+    theme: &crate::theme::Theme,
+) -> (LogPanelState, Vec<Effect>) {
     match action {
         Action::BuildLogsLoaded(jobs, pr_context) => {
             // Create master-detail log panel from job logs
-            state.panel = Some(crate::views::build_log::create_log_panel_from_jobs(
+            state.panel = Some(crate::log::create_log_panel_from_jobs(
                 jobs.clone(),
                 pr_context.clone(),
             ));
+            // Recompute view model
+            recompute_view_model(&mut state, theme);
         }
         Action::CloseLogPanel => {
             state.panel = None;
+            state.view_model = None;
         }
         Action::ScrollLogPanelUp => {
             if let Some(ref mut panel) = state.panel {
@@ -1571,17 +1578,23 @@ fn log_panel_reducer(mut state: LogPanelState, action: &Action) -> (LogPanelStat
                 // Scroll left by 5 characters for better UX
                 panel.horizontal_scroll = panel.horizontal_scroll.saturating_sub(5);
             }
+            // Horizontal scroll affects display text - recompute view model
+            recompute_view_model(&mut state, theme);
         }
         Action::ScrollLogPanelRight => {
             if let Some(ref mut panel) = state.panel {
                 // Scroll right by 5 characters for better UX
                 panel.horizontal_scroll = panel.horizontal_scroll.saturating_add(5);
             }
+            // Horizontal scroll affects display text - recompute view model
+            recompute_view_model(&mut state, theme);
         }
         Action::NextLogSection => {
             if let Some(ref mut panel) = state.panel {
                 panel.find_next_error();
             }
+            // Cursor position changed - recompute view model
+            recompute_view_model(&mut state, theme);
         }
         Action::PrevLogSection => {
             if let Some(ref mut panel) = state.panel {
@@ -1589,11 +1602,15 @@ fn log_panel_reducer(mut state: LogPanelState, action: &Action) -> (LogPanelStat
                 // For now, just navigate up
                 panel.navigate_up();
             }
+            // Cursor position changed - recompute view model
+            recompute_view_model(&mut state, theme);
         }
         Action::ToggleTimestamps => {
             if let Some(ref mut panel) = state.panel {
                 panel.show_timestamps = !panel.show_timestamps;
             }
+            // Timestamp display changed - recompute view model
+            recompute_view_model(&mut state, theme);
         }
         Action::UpdateLogPanelViewport(height) => {
             if let Some(ref mut panel) = state.panel {
@@ -1605,16 +1622,22 @@ fn log_panel_reducer(mut state: LogPanelState, action: &Action) -> (LogPanelStat
             if let Some(ref mut panel) = state.panel {
                 panel.navigate_down();
             }
+            // Cursor position changed - recompute view model
+            recompute_view_model(&mut state, theme);
         }
         Action::SelectPrevJob => {
             if let Some(ref mut panel) = state.panel {
                 panel.navigate_up();
             }
+            // Cursor position changed - recompute view model
+            recompute_view_model(&mut state, theme);
         }
         Action::ToggleTreeNode => {
             if let Some(ref mut panel) = state.panel {
                 panel.toggle_at_cursor();
             }
+            // Tree expansion changed - recompute view model
+            recompute_view_model(&mut state, theme);
         }
         Action::FocusJobList => {
             // No-op in tree view - unified view has no separate focus
@@ -1627,27 +1650,46 @@ fn log_panel_reducer(mut state: LogPanelState, action: &Action) -> (LogPanelStat
             if let Some(ref mut panel) = state.panel {
                 panel.navigate_down();
             }
+            // Cursor position changed - recompute view model
+            recompute_view_model(&mut state, theme);
         }
         Action::PrevStep => {
             if let Some(ref mut panel) = state.panel {
                 panel.navigate_up();
             }
+            // Cursor position changed - recompute view model
+            recompute_view_model(&mut state, theme);
         }
         // Error navigation
         Action::NextError => {
             if let Some(ref mut panel) = state.panel {
                 panel.find_next_error();
             }
+            // Cursor position changed - recompute view model
+            recompute_view_model(&mut state, theme);
         }
         Action::PrevError => {
             if let Some(ref mut panel) = state.panel {
                 panel.find_prev_error();
             }
+            // Cursor position changed - recompute view model
+            recompute_view_model(&mut state, theme);
         }
         _ => {}
     }
 
     (state, vec![])
+}
+
+/// Helper function to recompute view model from panel
+fn recompute_view_model(state: &mut LogPanelState, theme: &crate::theme::Theme) {
+    if let Some(ref panel) = state.panel {
+        state.view_model = Some(crate::view_models::log_panel::LogPanelViewModel::from_log_panel(
+            panel, theme,
+        ));
+    } else {
+        state.view_model = None;
+    }
 }
 
 /// Merge bot state reducer

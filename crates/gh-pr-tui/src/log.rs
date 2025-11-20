@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-/// Job execution status
+/// Job execution status (domain model - no presentation logic)
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum JobStatus {
     Success,
@@ -9,30 +9,6 @@ pub enum JobStatus {
     Skipped,
     InProgress,
     Unknown,
-}
-
-impl JobStatus {
-    pub fn icon(&self) -> &'static str {
-        match self {
-            JobStatus::Success => "✓",
-            JobStatus::Failure => "✗",
-            JobStatus::Cancelled => "⊘",
-            JobStatus::Skipped => "⊝",
-            JobStatus::InProgress => "⋯",
-            JobStatus::Unknown => "?",
-        }
-    }
-
-    pub fn color(&self, theme: &crate::theme::Theme) -> ratatui::style::Color {
-        match self {
-            JobStatus::Success => theme.status_success,
-            JobStatus::Failure => theme.status_error,
-            JobStatus::Cancelled => theme.text_muted,
-            JobStatus::Skipped => theme.text_muted,
-            JobStatus::InProgress => theme.status_warning,
-            JobStatus::Unknown => theme.text_secondary,
-        }
-    }
 }
 
 /// Metadata for a single build job
@@ -384,5 +360,102 @@ impl LogPanel {
         }
 
         result
+    }
+}
+
+/// Create LogPanel from parsed job logs (tree view)
+/// Builds a hierarchical tree: Workflow → Job → Step
+pub fn create_log_panel_from_jobs(
+    jobs: Vec<(JobMetadata, gh_actions_log_parser::JobLog)>,
+    pr_context: PrContext,
+) -> LogPanel {
+    use std::collections::HashMap;
+
+    // Group jobs by workflow name and convert to tree using parser
+    let mut workflows_map: HashMap<String, Vec<(JobMetadata, gh_actions_log_parser::JobNode)>> =
+        HashMap::new();
+    let mut job_metadata_map: HashMap<String, JobMetadata> = HashMap::new();
+
+    for (metadata, job_log) in jobs {
+        let job_node = gh_actions_log_parser::job_log_to_tree(job_log);
+
+        // Filter out jobs with no logs AND "/system" in name
+        let has_logs =
+            !job_node.steps.is_empty() && job_node.steps.iter().any(|step| !step.lines.is_empty());
+        let has_system = job_node.name.contains("/system");
+
+        // Skip this job if it has no logs AND has /system in name
+        if !has_logs && has_system {
+            continue;
+        }
+
+        let key = format!("{}:{}", metadata.workflow_name, job_node.name);
+        job_metadata_map.insert(key, metadata.clone());
+
+        workflows_map
+            .entry(metadata.workflow_name.clone())
+            .or_default()
+            .push((metadata, job_node));
+    }
+
+    // Build workflow nodes (jobs already filtered above)
+    let mut workflows: Vec<gh_actions_log_parser::WorkflowNode> = workflows_map
+        .into_iter()
+        .map(|(workflow_name, jobs)| {
+            let mut job_nodes: Vec<gh_actions_log_parser::JobNode> =
+                jobs.into_iter().map(|(_, job)| job).collect();
+
+            // Sort jobs alphabetically by name
+            job_nodes.sort_by(|a, b| a.name.cmp(&b.name));
+
+            let total_errors: usize = job_nodes.iter().map(|j| j.error_count).sum();
+            let has_failures = total_errors > 0;
+
+            gh_actions_log_parser::WorkflowNode {
+                name: workflow_name,
+                jobs: job_nodes,
+                total_errors,
+                has_failures,
+            }
+        })
+        .collect();
+
+    // Sort workflows: failed first, then by name
+    workflows.sort_by(|a, b| {
+        b.has_failures
+            .cmp(&a.has_failures)
+            .then(a.name.cmp(&b.name))
+    });
+
+    // Auto-expand workflows (top level) and nodes with errors
+    let mut expanded_nodes = std::collections::HashSet::new();
+    for (w_idx, workflow) in workflows.iter().enumerate() {
+        // Always expand workflows (top level)
+        expanded_nodes.insert(w_idx.to_string());
+
+        // Auto-expand jobs and steps with errors
+        for (j_idx, job) in workflow.jobs.iter().enumerate() {
+            if job.error_count > 0 {
+                expanded_nodes.insert(format!("{}:{}", w_idx, j_idx));
+
+                for (s_idx, step) in job.steps.iter().enumerate() {
+                    if step.error_count > 0 {
+                        expanded_nodes.insert(format!("{}:{}:{}", w_idx, j_idx, s_idx));
+                    }
+                }
+            }
+        }
+    }
+
+    LogPanel {
+        workflows,
+        job_metadata: job_metadata_map,
+        expanded_nodes,
+        cursor_path: vec![0], // Start at first workflow
+        scroll_offset: 0,
+        horizontal_scroll: 0,
+        show_timestamps: false,
+        viewport_height: 20,
+        pr_context,
     }
 }

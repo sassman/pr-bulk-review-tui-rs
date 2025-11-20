@@ -45,6 +45,7 @@ mod state;
 mod store;
 mod task;
 mod theme;
+mod view_models;
 mod views;
 
 pub struct App {
@@ -416,10 +417,10 @@ fn ui(f: &mut Frame, app: &mut App) {
     crate::views::status_bar::render_status_bar(f, app, chunks[3]);
 
     // Render log panel LAST if it's open - covers only the table area
-    if let Some(ref panel) = app.store.state().log_panel.panel {
-        let viewport_height = crate::views::build_log::render_log_panel_card(
+    if let Some(ref view_model) = app.store.state().log_panel.view_model {
+        let viewport_height = crate::views::build_log::render_log_panel(
             f,
-            panel,
+            view_model,
             &app.store.state().theme,
             chunks[1],
         );
