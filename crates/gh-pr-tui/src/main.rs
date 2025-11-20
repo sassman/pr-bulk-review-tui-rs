@@ -47,6 +47,7 @@ mod state;
 mod store;
 mod task;
 mod theme;
+mod views;
 
 pub struct App {
     // Redux store - centralized state management
@@ -581,7 +582,7 @@ fn ui(f: &mut Frame, app: &mut App) {
 
     // Render shortcuts panel on top of everything if visible
     if app.store.state().ui.show_shortcuts {
-        let max_scroll = crate::shortcuts::render_shortcuts_panel(
+        let max_scroll = crate::views::help::render_shortcuts_panel(
             f,
             chunks[1],
             app.store.state().ui.shortcuts_scroll,
