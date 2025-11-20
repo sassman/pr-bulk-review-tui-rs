@@ -91,6 +91,7 @@ pub enum BackgroundTask {
         filter: PrFilter,
         octocrab: Octocrab,
         cache: std::sync::Arc<std::sync::Mutex<crate::cache::ApiCache>>,
+        bypass_cache: bool, // True for user-triggered refresh, false for lazy loading
     },
     CheckMergeStatus {
         repo_index: usize,
@@ -246,14 +247,16 @@ async fn process_task(task: BackgroundTask, result_tx: &mut mpsc::UnboundedSende
             filter,
             octocrab,
             cache,
+            bypass_cache,
         } => {
             debug!(
-                "Loading repo {}/{} (index: {})...",
-                repo.org, repo.repo, repo_index
+                "Loading repo {}/{} (index: {}, bypass_cache: {})...",
+                repo.org, repo.repo, repo_index, bypass_cache
             );
-            let result = crate::fetch_github_data_cached(&octocrab, &repo, &filter, &cache, false)
-                .await
-                .map_err(|e| e.to_string());
+            let result =
+                crate::fetch_github_data_cached(&octocrab, &repo, &filter, &cache, bypass_cache)
+                    .await
+                    .map_err(|e| e.to_string());
 
             // Log success or error
             match &result {

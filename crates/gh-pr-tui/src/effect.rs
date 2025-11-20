@@ -43,6 +43,7 @@ pub enum Effect {
         repo_index: usize,
         repo: Repo,
         filter: crate::state::PrFilter,
+        bypass_cache: bool, // True for user-triggered refresh, false for lazy loading
     },
 
     /// Trigger delayed repo reload (waits before reloading)
@@ -292,6 +293,7 @@ pub async fn execute_effect(app: &mut App, effect: Effect) -> Result<Vec<Action>
             repo_index,
             repo,
             filter,
+            bypass_cache,
         } => {
             // Trigger background task to load single repo
             follow_up_actions.push(Action::SetReposLoading(vec![repo_index]));
@@ -306,6 +308,7 @@ pub async fn execute_effect(app: &mut App, effect: Effect) -> Result<Vec<Action>
                 filter,
                 octocrab: app.octocrab()?,
                 cache: app.cache.clone(),
+                bypass_cache,
             });
         }
 
@@ -314,6 +317,7 @@ pub async fn execute_effect(app: &mut App, effect: Effect) -> Result<Vec<Action>
             delay_ms,
         } => {
             // Trigger delayed repo reload using DelayedTask wrapper
+            // Delayed reload is typically after operations (merge/rebase), so bypass cache
             if let Some(repo) = app
                 .store
                 .state()
@@ -330,6 +334,7 @@ pub async fn execute_effect(app: &mut App, effect: Effect) -> Result<Vec<Action>
                         filter,
                         octocrab: app.octocrab()?,
                         cache: app.cache.clone(),
+                        bypass_cache: true, // Get fresh data after operations
                     }),
                     delay_ms,
                 });
@@ -672,7 +677,7 @@ pub async fn execute_effect(app: &mut App, effect: Effect) -> Result<Vec<Action>
                     status_type: TaskStatusType::Success,
                 })));
 
-                // Trigger loading PRs for the new repo
+                // Trigger loading PRs for the new repo (use cache for initial load)
                 let filter = app.store.state().repos.filter.clone();
                 let _ = app.task_tx.send(BackgroundTask::LoadSingleRepo {
                     repo_index,
@@ -680,6 +685,7 @@ pub async fn execute_effect(app: &mut App, effect: Effect) -> Result<Vec<Action>
                     filter,
                     octocrab: app.octocrab()?,
                     cache: app.cache.clone(),
+                    bypass_cache: false, // Use cache for initial load of newly added repo
                 });
             } else {
                 // Repository already exists

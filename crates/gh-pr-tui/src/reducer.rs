@@ -88,11 +88,12 @@ pub fn reduce(mut state: AppState, action: &Action) -> (AppState, Vec<Effect>) {
                                 status_type: TaskStatusType::Success,
                             },
                         ))));
-                        // Refresh the PR list
+                        // Refresh the PR list (bypass cache after merge operations)
                         effects.push(Effect::LoadSingleRepo {
                             repo_index: state.repos.selected_repo,
                             repo: repo.clone(),
                             filter: state.repos.filter.clone(),
+                            bypass_cache: true, // Get fresh data after merge operations
                         });
                     }
                 }
@@ -432,11 +433,12 @@ fn repos_reducer(
                 let data = state.repo_data.entry(result.selected_repo).or_default();
                 data.loading_state = LoadingState::Loading;
 
-                // Effect: Load just the selected repo first
+                // Effect: Load just the selected repo first (use cache for fast startup)
                 effects.push(Effect::LoadSingleRepo {
                     repo_index: result.selected_repo,
                     repo: selected_repo.clone(),
                     filter: state.filter.clone(),
+                    bypass_cache: false, // Use cache for initial load to speed up startup
                 });
 
                 // Effect: Show status message
@@ -814,12 +816,13 @@ fn repos_reducer(
         Action::CycleFilter => {
             state.filter = state.filter.next();
 
-            // Reload current repository with new filter
+            // Reload current repository with new filter (use cache, filter is client-side)
             if let Some(repo) = state.recent_repos.get(state.selected_repo).cloned() {
                 effects.push(Effect::LoadSingleRepo {
                     repo_index: state.selected_repo,
                     repo,
                     filter: state.filter.clone(),
+                    bypass_cache: false, // Filter is client-side, can use cached data
                 });
             }
         }
@@ -989,12 +992,13 @@ fn repos_reducer(
             });
         }
         Action::RefreshCurrentRepo => {
-            // Effect: Reload current repository
+            // Effect: Reload current repository (bypass cache for user-triggered refresh)
             if let Some(repo) = state.recent_repos.get(state.selected_repo).cloned() {
                 effects.push(Effect::LoadSingleRepo {
                     repo_index: state.selected_repo,
                     repo,
                     filter: state.filter.clone(),
+                    bypass_cache: true, // User-triggered refresh should bypass cache
                 });
             }
         }
@@ -1005,6 +1009,7 @@ fn repos_reducer(
                     repo_index: *repo_index,
                     repo,
                     filter: state.filter.clone(),
+                    bypass_cache: true, // Bypass cache to get fresh data after operations
                 });
             }
         }
