@@ -282,7 +282,8 @@ async fn run_with_log_buffer(log_buffer: log_capture::LogBuffer) -> Result<()> {
         // Sync close PR popup visibility to shared state
         *show_close_pr_shared.lock().unwrap() = app.store.state().ui.close_pr_state.is_some();
         // Sync command palette visibility to shared state
-        *show_command_palette_shared.lock().unwrap() = app.store.state().ui.command_palette.is_some();
+        *show_command_palette_shared.lock().unwrap() =
+            app.store.state().ui.command_palette.is_some();
 
         // Sync the shared debug console state for event handler
         *debug_console_shared.lock().unwrap() = app.store.state().debug_console.is_open;
@@ -1138,10 +1139,7 @@ fn render_command_palette(f: &mut Frame, area: Rect, app: &App) {
     }
 
     // Render details area with selected command info
-    if let Some((selected_cmd, _)) = palette
-        .filtered_commands
-        .get(palette.selected_index)
-    {
+    if let Some((selected_cmd, _)) = palette.filtered_commands.get(palette.selected_index) {
         let mut details_text = vec![];
 
         // Show description
@@ -1800,7 +1798,9 @@ fn handle_key_event(key: KeyEvent, ctx: &KeyEventContext) -> Action {
         match key.code {
             KeyCode::Esc => return Action::HideCommandPalette,
             KeyCode::Enter => return Action::CommandPaletteExecute,
-            KeyCode::Down | KeyCode::Char('j') if !key.modifiers.contains(KeyModifiers::CONTROL) => {
+            KeyCode::Down | KeyCode::Char('j')
+                if !key.modifiers.contains(KeyModifiers::CONTROL) =>
+            {
                 return Action::CommandPaletteSelectNext;
             }
             KeyCode::Up | KeyCode::Char('k') if !key.modifiers.contains(KeyModifiers::CONTROL) => {

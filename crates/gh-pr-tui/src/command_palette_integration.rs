@@ -6,7 +6,7 @@
 use gh_pr_tui_command_palette::{CommandItem, CommandProvider};
 
 use crate::actions::Action;
-use crate::shortcuts::{get_all_shortcuts_flat, Shortcut};
+use crate::shortcuts::{Shortcut, get_all_shortcuts_flat};
 use crate::state::AppState;
 
 /// Parse shortcut hint and extract context information
@@ -15,12 +15,12 @@ use crate::state::AppState;
 /// Returns clean shortcut without context.
 fn parse_shortcut_hint(key_display: &str) -> (String, Option<String>) {
     // Look for parenthetical context like "(when console open)"
-    if let Some(paren_start) = key_display.find('(') {
-        if let Some(paren_end) = key_display.find(')') {
-            let shortcut = key_display[..paren_start].trim();
-            let context = key_display[paren_start + 1..paren_end].trim();
-            return (shortcut.to_string(), Some(context.to_string()));
-        }
+    if let Some(paren_start) = key_display.find('(')
+        && let Some(paren_end) = key_display.find(')')
+    {
+        let shortcut = key_display[..paren_start].trim();
+        let context = key_display[paren_start + 1..paren_end].trim();
+        return (shortcut.to_string(), Some(context.to_string()));
     }
 
     // No context found
@@ -104,9 +104,9 @@ fn extract_category(shortcut: &Shortcut) -> String {
         | Action::DeleteCurrentRepo
         | Action::ClearPrSelection => "General".to_string(),
 
-        Action::ToggleDebugConsole
-        | Action::ClearDebugLogs
-        | Action::ToggleDebugAutoScroll => "Debug".to_string(),
+        Action::ToggleDebugConsole | Action::ClearDebugLogs | Action::ToggleDebugAutoScroll => {
+            "Debug".to_string()
+        }
 
         _ => "Other".to_string(),
     }
@@ -208,9 +208,11 @@ mod tests {
         let commands = palette.all_commands(&empty_state);
 
         // Check that selection-dependent actions aren't present
-        assert!(!commands
-            .iter()
-            .any(|cmd| matches!(cmd.action, Action::MergeSelectedPrs)));
+        assert!(
+            !commands
+                .iter()
+                .any(|cmd| matches!(cmd.action, Action::MergeSelectedPrs))
+        );
 
         // Note: Full context testing with PRs would require building a complete Pr struct
         // which depends on many external types. The context filtering logic is tested

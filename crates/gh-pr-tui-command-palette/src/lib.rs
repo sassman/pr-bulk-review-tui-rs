@@ -43,5 +43,5 @@
 mod provider;
 mod search;
 
-pub use provider::{CommandItem, CommandProvider, CommandPalette};
+pub use provider::{CommandItem, CommandPalette, CommandProvider};
 pub use search::filter_commands;

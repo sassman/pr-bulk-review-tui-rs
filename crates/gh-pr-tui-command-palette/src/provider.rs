@@ -127,16 +127,14 @@ mod tests {
 
     impl CommandProvider<TestAction, TestState> for TestProvider {
         fn commands(&self, state: &TestState) -> Vec<CommandItem<TestAction>> {
-            let mut commands = vec![
-                CommandItem {
-                    title: "Quit".into(),
-                    description: "Exit the application".into(),
-                    category: "General".into(),
-                    shortcut_hint: Some("q".into()),
-                    context: None,
-                    action: TestAction::Quit,
-                },
-            ];
+            let mut commands = vec![CommandItem {
+                title: "Quit".into(),
+                description: "Exit the application".into(),
+                category: "General".into(),
+                shortcut_hint: Some("q".into()),
+                context: None,
+                action: TestAction::Quit,
+            }];
 
             if state.can_save {
                 commands.push(CommandItem {
