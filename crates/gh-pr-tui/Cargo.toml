@@ -25,4 +25,5 @@ dotenvy = { workspace = true }
 
 # Local crates
 gh-actions-log-parser = { path = "../gh-actions-log-parser" }
+gh-api-cache = { path = "../gh-api-cache" }
 gh-pr-tui-command-palette = { path = "../gh-pr-tui-command-palette" }

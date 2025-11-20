@@ -6,6 +6,7 @@ use crate::{
     pr::{MergeableStatus, Pr},
     state::{Repo, TaskStatus},
 };
+use gh_api_cache::ApiCache;
 use log::{debug, error};
 use octocrab::Octocrab;
 use std::path::PathBuf;
@@ -83,14 +84,14 @@ pub enum BackgroundTask {
         repos: Vec<(usize, Repo)>, // (repo_index, repo) pairs
         filter: PrFilter,
         octocrab: Octocrab,
-        cache: std::sync::Arc<std::sync::Mutex<crate::cache::ApiCache>>,
+        cache: std::sync::Arc<std::sync::Mutex<ApiCache>>,
     },
     LoadSingleRepo {
         repo_index: usize,
         repo: Repo,
         filter: PrFilter,
         octocrab: Octocrab,
-        cache: std::sync::Arc<std::sync::Mutex<crate::cache::ApiCache>>,
+        cache: std::sync::Arc<std::sync::Mutex<ApiCache>>,
         bypass_cache: bool, // True for user-triggered refresh, false for lazy loading
     },
     CheckMergeStatus {

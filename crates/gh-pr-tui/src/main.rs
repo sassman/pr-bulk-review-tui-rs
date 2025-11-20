@@ -1,4 +1,5 @@
 use anyhow::{Context, Result};
+use gh_api_cache::{ApiCache, CachedResponse};
 use octocrab::{Octocrab, params};
 use ratatui::{
     crossterm::{
@@ -19,7 +20,6 @@ use tokio::sync::mpsc;
 use ::log::debug;
 
 use crate::actions::Action;
-use crate::cache::ApiCache;
 use crate::config::Config;
 use crate::effect::execute_effect;
 use crate::pr::Pr;
@@ -29,7 +29,6 @@ use crate::task::{BackgroundTask, TaskResult, start_task_worker};
 use crate::theme::Theme;
 
 mod actions;
-mod cache;
 mod command_palette_integration;
 mod config;
 mod effect;
@@ -512,12 +511,15 @@ impl App {
             theme,
         };
 
+        let cache_file = crate::infra::files::get_cache_file_path()
+            .unwrap_or_else(|_| std::env::temp_dir().join("gh-api-cache.json"));
+
         App {
             store: Store::new(initial_state),
             action_tx,
             task_tx,
             octocrab: None, // Initialized lazily during bootstrap after .env is loaded
-            cache: Arc::new(Mutex::new(ApiCache::new().unwrap_or_default())),
+            cache: Arc::new(Mutex::new(ApiCache::new(cache_file).unwrap_or_default())),
         }
     }
 
@@ -625,15 +627,19 @@ pub async fn fetch_github_data_cached(
     cache: &Arc<Mutex<ApiCache>>,
     bypass_cache: bool,
 ) -> Result<Vec<Pr>> {
-    use crate::cache::CachedResponse;
+    // Skip cache if disabled entirely (environment variable)
+    if !ApiCache::is_enabled() {
+        debug!("Cache disabled, fetching fresh data for {}/{}", repo.org, repo.repo);
+        return fetch_github_data(octocrab, repo, filter).await;
+    }
 
-    // Skip cache if disabled or bypassed
-    if !ApiCache::is_enabled() || bypass_cache {
+    // If bypassing cache (manual refresh), skip cache lookup but still update cache after fetch
+    if bypass_cache {
         debug!(
-            "Cache bypassed, fetching fresh data for {}/{}",
+            "Cache bypass requested (manual refresh), will fetch fresh data and update cache for {}/{}",
             repo.org, repo.repo
         );
-        return fetch_github_data(octocrab, repo, filter).await;
+        // Continue to fetch fresh data and update cache below
     }
 
     // Build cache key from API endpoint and params
@@ -644,70 +650,77 @@ pub async fn fetch_github_data_cached(
         ("per_page", "30"),
     ];
 
-    // Try to get cached response
-    let cached = {
-        let cache_guard = cache.lock().unwrap();
-        cache_guard.get("GET", &url, &params)
-    };
+    // Try to get cached response (unless bypassing cache for manual refresh)
+    if !bypass_cache {
+        let cached = {
+            let cache_guard = cache.lock().unwrap();
+            cache_guard.get("GET", &url, &params)
+        };
 
-    if let Some(cached_response) = cached {
-        // Try to parse cached body
-        match serde_json::from_str::<Vec<octocrab::models::pulls::PullRequest>>(
-            &cached_response.body,
-        ) {
-            Ok(prs_data) => {
-                debug!(
-                    "Cache HIT for {}/{}: {} PRs (status: {})",
-                    repo.org,
-                    repo.repo,
-                    prs_data.len(),
-                    cached_response.status_code
-                );
+        if let Some(cached_response) = cached {
+            // Try to parse cached body
+            match serde_json::from_str::<Vec<octocrab::models::pulls::PullRequest>>(
+                &cached_response.body,
+            ) {
+                Ok(prs_data) => {
+                    debug!(
+                        "Cache HIT for {}/{}: {} PRs (status: {})",
+                        repo.org,
+                        repo.repo,
+                        prs_data.len(),
+                        cached_response.status_code
+                    );
 
-                // Convert to our Pr type (without fetching additional details)
-                // For cached PRs, we'll use cached status data
-                let mut prs = Vec::new();
-                for pr_model in prs_data.into_iter().filter(|pr| {
-                    pr.title
-                        .as_ref()
-                        .map(|t| filter.matches(t))
-                        .unwrap_or(false)
-                }) {
-                    if prs.len() >= 50 {
-                        break;
+                    // Convert to our Pr type (without fetching additional details)
+                    // For cached PRs, we'll use cached status data
+                    let mut prs = Vec::new();
+                    for pr_model in prs_data.into_iter().filter(|pr| {
+                        pr.title
+                            .as_ref()
+                            .map(|t| filter.matches(t))
+                            .unwrap_or(false)
+                    }) {
+                        if prs.len() >= 50 {
+                            break;
+                        }
+                        let pr = Pr::from_pull_request(&pr_model, repo, octocrab).await;
+                        prs.push(pr);
                     }
-                    let pr = Pr::from_pull_request(&pr_model, repo, octocrab).await;
-                    prs.push(pr);
+
+                    prs.sort_by(|a, b| b.number.cmp(&a.number));
+
+                    // If cache entry was stale (status_code 200), refresh in background
+                    // but return cached data immediately for fast startup
+                    if cached_response.status_code == 200 {
+                        // Touch the cache to extend TTL since we validated it's still useful
+                        let mut cache_guard = cache.lock().unwrap();
+                        let _ = cache_guard.touch("GET", &url, &params);
+                    }
+
+                    return Ok(prs);
                 }
-
-                prs.sort_by(|a, b| b.number.cmp(&a.number));
-
-                // If cache entry was stale (status_code 200), refresh in background
-                // but return cached data immediately for fast startup
-                if cached_response.status_code == 200 {
-                    // Touch the cache to extend TTL since we validated it's still useful
+                Err(e) => {
+                    debug!(
+                        "Failed to parse cached response for {}/{}: {}",
+                        repo.org, repo.repo, e
+                    );
+                    // Cache entry is corrupted, invalidate it and fetch fresh
                     let mut cache_guard = cache.lock().unwrap();
-                    let _ = cache_guard.touch("GET", &url, &params);
+                    cache_guard.invalidate("GET", &url, &params);
                 }
-
-                return Ok(prs);
-            }
-            Err(e) => {
-                debug!(
-                    "Failed to parse cached response for {}/{}: {}",
-                    repo.org, repo.repo, e
-                );
-                // Cache entry is corrupted, invalidate it and fetch fresh
-                let mut cache_guard = cache.lock().unwrap();
-                cache_guard.invalidate("GET", &url, &params);
             }
         }
     }
 
-    // Cache miss or invalid - fetch fresh data
+    // Cache miss, invalid, or bypassed - fetch fresh data
+    let reason = if bypass_cache {
+        "bypass"
+    } else {
+        "miss"
+    };
     debug!(
-        "Cache MISS for {}/{}, fetching from API",
-        repo.org, repo.repo
+        "Cache {} for {}/{}, fetching from API",
+        reason, repo.org, repo.repo
     );
     let prs = fetch_github_data(octocrab, repo, filter).await?;
 

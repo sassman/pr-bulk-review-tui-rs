@@ -850,6 +850,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "gh-api-cache"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "log",
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "gh-pr-tui"
 version = "0.1.0"
 dependencies = [
@@ -859,6 +869,7 @@ dependencies = [
  "dotenvy",
  "env_logger",
  "gh-actions-log-parser",
+ "gh-api-cache",
  "gh-pr-tui-command-palette",
  "log",
  "octocrab",

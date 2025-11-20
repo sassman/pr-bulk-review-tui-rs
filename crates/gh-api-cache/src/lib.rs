@@ -49,9 +49,20 @@ pub struct CacheStats {
 }
 
 impl ApiCache {
-    /// Create cache with 20-minute TTL (hardcoded for development workflow)
-    pub fn new() -> Result<Self> {
-        let cache_file = crate::infra::files::get_cache_file_path()?;
+    /// Create cache with custom cache file path and 20-minute TTL
+    ///
+    /// # Arguments
+    /// * `cache_file` - Path to the cache file on disk
+    ///
+    /// # Example
+    /// ```rust,no_run
+    /// use gh_api_cache::ApiCache;
+    /// use std::path::PathBuf;
+    ///
+    /// let cache_file = PathBuf::from(".cache").join("gh-api-cache.json");
+    /// let cache = ApiCache::new(cache_file).expect("Failed to create cache");
+    /// ```
+    pub fn new(cache_file: PathBuf) -> Result<Self> {
         let ttl_seconds = 20 * 60; // 20 minutes
 
         let entries = if cache_file.exists() {
@@ -275,6 +286,11 @@ impl ApiCache {
     }
 
     fn save_to_disk(&self) -> Result<()> {
+        // Ensure parent directory exists
+        if let Some(parent) = self.cache_file.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+
         let cache_file = CacheFile {
             version: 1,
             entries: self.entries.clone(),
@@ -289,15 +305,13 @@ impl ApiCache {
 
 impl Default for ApiCache {
     fn default() -> Self {
-        Self::new().unwrap_or_else(|_| {
-            // Fallback to in-memory only cache if disk fails
-            warn!("Failed to create disk cache, using in-memory only");
-            Self {
-                cache_file: PathBuf::from(".cache/gh-api-cache.json"),
-                ttl_seconds: 20 * 60,
-                entries: HashMap::new(),
-            }
-        })
+        // Fallback to in-memory only cache if no path provided
+        warn!("Using default ApiCache with temp path - call new() with proper path instead");
+        Self {
+            cache_file: std::env::temp_dir().join("gh-api-cache.json"),
+            ttl_seconds: 20 * 60,
+            entries: HashMap::new(),
+        }
     }
 }
 
@@ -330,7 +344,8 @@ mod tests {
 
     #[test]
     fn test_cache_get_set() {
-        let mut cache = ApiCache::default();
+        let cache_file = std::env::temp_dir().join("gh-api-cache-test-get-set.json");
+        let mut cache = ApiCache::new(cache_file).unwrap();
 
         let response = CachedResponse {
             body: r#"{"data": "test"}"#.into(),
@@ -352,12 +367,9 @@ mod tests {
 
     #[test]
     fn test_cache_ttl() {
-        let cache_file = std::env::temp_dir().join("gh-pr-tui-test-ttl.json");
-        let mut cache = ApiCache {
-            cache_file,
-            ttl_seconds: 2, // 2 second TTL for test
-            entries: HashMap::new(),
-        };
+        let cache_file = std::env::temp_dir().join("gh-api-cache-test-ttl.json");
+        let mut cache = ApiCache::new(cache_file).unwrap();
+        cache.ttl_seconds = 2; // 2 second TTL for test
 
         let response = CachedResponse {
             body: "test".into(),
@@ -381,7 +393,8 @@ mod tests {
 
     #[test]
     fn test_cache_invalidate() {
-        let mut cache = ApiCache::default();
+        let cache_file = std::env::temp_dir().join("gh-api-cache-test-invalidate.json");
+        let mut cache = ApiCache::new(cache_file).unwrap();
 
         let response = CachedResponse {
             body: "test".into(),
@@ -398,12 +411,8 @@ mod tests {
 
     #[test]
     fn test_cache_invalidate_pattern() {
-        let cache_file = std::env::temp_dir().join("gh-pr-tui-test-pattern.json");
-        let mut cache = ApiCache {
-            cache_file,
-            ttl_seconds: 20 * 60,
-            entries: HashMap::new(),
-        };
+        let cache_file = std::env::temp_dir().join("gh-api-cache-test-pattern.json");
+        let mut cache = ApiCache::new(cache_file).unwrap();
 
         let response = CachedResponse {
             body: "test".into(),
@@ -432,12 +441,9 @@ mod tests {
 
     #[test]
     fn test_cache_touch() {
-        let cache_file = std::env::temp_dir().join("gh-pr-tui-test-touch.json");
-        let mut cache = ApiCache {
-            cache_file,
-            ttl_seconds: 2,
-            entries: HashMap::new(),
-        };
+        let cache_file = std::env::temp_dir().join("gh-api-cache-test-touch.json");
+        let mut cache = ApiCache::new(cache_file).unwrap();
+        cache.ttl_seconds = 2;
 
         let response = CachedResponse {
             body: "test".into(),
@@ -463,12 +469,9 @@ mod tests {
 
     #[test]
     fn test_cache_stats() {
-        let cache_file = std::env::temp_dir().join("gh-pr-tui-test-stats.json");
-        let mut cache = ApiCache {
-            cache_file,
-            ttl_seconds: 1,
-            entries: HashMap::new(),
-        };
+        let cache_file = std::env::temp_dir().join("gh-api-cache-test-stats.json");
+        let mut cache = ApiCache::new(cache_file).unwrap();
+        cache.ttl_seconds = 1;
 
         let response = CachedResponse {
             body: "test".into(),

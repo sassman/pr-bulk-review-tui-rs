@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "crates/gh-actions-log-parser",
+    "crates/gh-api-cache",
     "crates/gh-pr-tui",
     "crates/gh-pr-tui-command-palette",
 ]
