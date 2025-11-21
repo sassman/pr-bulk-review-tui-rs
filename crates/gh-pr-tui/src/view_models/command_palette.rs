@@ -13,6 +13,8 @@ pub struct CommandPaletteViewModel {
     pub selected_command: Option<SelectedCommand>,
     /// Pre-calculated scroll offset
     pub scroll_offset: usize,
+    /// Maximum category width (calculated from all filtered commands)
+    pub max_category_width: u16,
 }
 
 /// A single row in the command palette list
@@ -56,6 +58,14 @@ impl CommandPaletteViewModel {
     ) -> Self {
         let total_commands = filtered_commands.len();
 
+        // Calculate maximum category width from all filtered commands
+        // Category format is "[Category]", so we need length + 2 for brackets
+        let max_category_width = filtered_commands
+            .iter()
+            .map(|(cmd, _)| (cmd.category.len() + 2) as u16)
+            .max()
+            .unwrap_or(15); // Fallback to 15 if no commands
+
         // Calculate scroll offset to keep selected item visible
         let scroll_offset = if total_commands == 0 {
             0
@@ -92,7 +102,9 @@ impl CommandPaletteViewModel {
 
                 // No truncation needed - Table widget handles column sizing
                 let title = cmd.title.clone();
+                // Format category with right alignment (pad on the left)
                 let category = format!("[{}]", cmd.category);
+                let category = format!("{:>width$}", category, width = max_category_width as usize);
 
                 // Colors
                 let (fg_color, bg_color) = if is_selected {
@@ -129,6 +141,7 @@ impl CommandPaletteViewModel {
             visible_rows,
             selected_command,
             scroll_offset,
+            max_category_width,
         }
     }
 }

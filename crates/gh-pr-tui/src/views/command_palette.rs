@@ -149,9 +149,9 @@ pub fn render_command_palette(f: &mut Frame, area: Rect, app: &App) {
         let table = Table::new(
             rows,
             vec![
-                Constraint::Length(15),    // Indicator + shortcut (2 + 13)
-                Constraint::Percentage(70), // Title (takes most space)
-                Constraint::Min(15),        // Category (flexible, min 15 for longest)
+                Constraint::Length(15),                     // Indicator + shortcut (2 + 13)
+                Constraint::Percentage(70),                 // Title (takes most space)
+                Constraint::Length(vm.max_category_width),  // Category (dynamically calculated)
             ],
         )
         .style(Style::default().bg(theme.bg_panel));
