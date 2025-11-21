@@ -212,13 +212,14 @@ pub async fn execute_effect(app: &mut App, effect: Effect) -> Result<Vec<Action>
         }
 
         Effect::InitializeOctocrab => {
-            // Initialize octocrab client with GITHUB_TOKEN
+            // Initialize octocrab client with GITHUB_TOKEN (pure Redux: dispatch action)
             // This happens after LoadEnvFile, ensuring token is available
             match env::var("GITHUB_TOKEN") {
                 Ok(token) => match Octocrab::builder().personal_token(token).build() {
                     Ok(client) => {
-                        app.octocrab = Some(client);
                         debug!("Octocrab client initialized successfully");
+                        // Dispatch action - reducer will store client in state
+                        follow_up_actions.push(Action::OctocrabInitialized(client));
                     }
                     Err(e) => {
                         debug!("Failed to initialize octocrab: {}", e);

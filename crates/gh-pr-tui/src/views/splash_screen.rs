@@ -62,7 +62,7 @@ pub fn render_splash_screen(f: &mut Frame, app: &App) {
         .split(inner);
 
     // Determine stage info
-    let (stage_message, progress, is_error) = match &app.store.state().repos.bootstrap_state {
+    let (stage_message, progress, is_error) = match &app.store.state().infrastructure.bootstrap_state {
         BootstrapState::NotStarted => ("Initializing application...", 0, false),
         BootstrapState::LoadingRepositories => ("Loading repositories...", 25, false),
         BootstrapState::RestoringSession => ("Restoring session...", 50, false),

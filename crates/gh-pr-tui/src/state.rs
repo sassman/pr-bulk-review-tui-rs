@@ -18,6 +18,18 @@ pub struct AppState {
     pub debug_console: DebugConsoleState,
     pub config: Config,
     pub theme: Theme,
+
+    /// Infrastructure state
+    pub infrastructure: InfrastructureState,
+}
+
+/// Infrastructure state (GitHub client, etc.)
+#[derive(Debug, Clone, Default)]
+pub struct InfrastructureState {
+    /// Octocrab GitHub client (initialized during bootstrap)
+    pub octocrab: Option<octocrab::Octocrab>,
+    /// Bootstrap progress
+    pub bootstrap_state: BootstrapState,
 }
 
 /// Pending key press for two-key combinations
@@ -122,7 +134,6 @@ pub struct ReposState {
     pub filter: PrFilter,
     pub repo_data: HashMap<usize, RepoData>,
     pub loading_state: LoadingState,
-    pub bootstrap_state: BootstrapState,
     // Legacy fields from App for backward compatibility during migration
     pub prs: Vec<Pr>,
     pub state: TableState,
@@ -377,7 +388,6 @@ impl Default for ReposState {
             filter: PrFilter::None,
             repo_data: HashMap::new(),
             loading_state: LoadingState::default(),
-            bootstrap_state: BootstrapState::default(),
             prs: Vec::new(),
             state: TableState::default(),
             colors: TableColors::default(),

@@ -367,7 +367,7 @@ async fn run_with_log_buffer(log_buffer: log_capture::LogBuffer) -> Result<()> {
 fn ui(f: &mut Frame, app: &mut App) {
     // Show bootstrap/splash screen until UI is ready (first repo loaded)
     let ui_ready = matches!(
-        app.store.state().repos.bootstrap_state,
+        app.store.state().infrastructure.bootstrap_state,
         BootstrapState::UIReady | BootstrapState::LoadingRemainingRepos | BootstrapState::Completed
     );
 
@@ -509,6 +509,7 @@ impl App {
             },
             config: Config::load(),
             theme,
+            infrastructure: InfrastructureState::default(),
         };
 
         let cache_file = crate::infra::files::get_cache_file_path()

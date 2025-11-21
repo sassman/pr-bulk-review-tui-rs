@@ -77,6 +77,7 @@ pub enum Action {
 
     // State update actions (dispatched internally)
     SetBootstrapState(crate::state::BootstrapState),
+    OctocrabInitialized(octocrab::Octocrab), // Octocrab client ready (dispatched after env load)
     SetLoadingState(crate::state::LoadingState),
     SetTaskStatus(Option<crate::state::TaskStatus>),
     SetReposLoading(Vec<usize>), // Set multiple repos to loading state

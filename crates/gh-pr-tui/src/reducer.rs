@@ -102,12 +102,16 @@ pub fn reduce(mut state: AppState, action: &Action) -> (AppState, Vec<Effect>) {
     }
 
     // Apply each sub-reducer and collect effects
+    let (infrastructure_state, infrastructure_effects) = infrastructure_reducer(state.infrastructure, action);
+    state.infrastructure = infrastructure_state;
+    effects.extend(infrastructure_effects);
+
     let (ui_state, ui_effects) = ui_reducer(state.ui, action);
     state.ui = ui_state;
     effects.extend(ui_effects);
 
     let (repos_state, repos_effects) =
-        repos_reducer(state.repos, action, &state.config, &state.theme);
+        repos_reducer(state.repos, action, &state.config, &state.theme, &state.infrastructure);
     state.repos = repos_state;
     effects.extend(repos_effects);
 
@@ -379,6 +383,48 @@ fn parse_github_url(url: &str) -> Option<(String, String, String)> {
     }
 }
 
+/// Infrastructure reducer - manages GitHub client and bootstrap process
+/// Handles initialization of external services
+fn infrastructure_reducer(
+    mut state: InfrastructureState,
+    action: &Action,
+) -> (InfrastructureState, Vec<Effect>) {
+    match action {
+        Action::Bootstrap => {
+            // Start bootstrap sequence
+            state.bootstrap_state = BootstrapState::LoadingRepositories;
+
+            // Return effects for loading env and initializing octocrab
+            (state, vec![
+                Effect::LoadEnvFile,
+                Effect::InitializeOctocrab,
+                Effect::LoadRepositories,
+            ])
+        }
+        Action::OctocrabInitialized(client) => {
+            // Store initialized Octocrab client in state (reducer responsibility)
+            state.octocrab = Some(client.clone());
+            (state, vec![])
+        }
+        Action::SetBootstrapState(new_state) => {
+            state.bootstrap_state = new_state.clone();
+            (state, vec![])
+        }
+        Action::BootstrapComplete(result) => {
+            match result {
+                Ok(_) => {
+                    state.bootstrap_state = BootstrapState::UIReady;
+                }
+                Err(_) => {
+                    state.bootstrap_state = BootstrapState::Error(result.as_ref().unwrap_err().clone());
+                }
+            }
+            (state, vec![])
+        }
+        _ => (state, vec![]),
+    }
+}
+
 /// Repository and PR state reducer
 /// ALL logic lives here - reducer returns effects to be performed
 fn repos_reducer(
@@ -386,25 +432,21 @@ fn repos_reducer(
     action: &Action,
     config: &crate::config::Config,
     theme: &crate::theme::Theme,
+    infrastructure: &InfrastructureState,
 ) -> (ReposState, Vec<Effect>) {
     let mut effects = vec![];
 
     match action {
         // Bootstrap: Load repositories and session
         Action::Bootstrap => {
-            info!("Starting application bootstrap...");
-            state.bootstrap_state = BootstrapState::LoadingRepositories;
-            // Effect: Load .env file if needed (checked by effect executor)
-            effects.push(Effect::LoadEnvFile);
-            // Effect: Initialize octocrab client (must happen after .env is loaded)
-            effects.push(Effect::InitializeOctocrab);
-            // Effect: Load repositories from config file
-            effects.push(Effect::LoadRepositories);
+            info!("Starting application bootstrap (repos_reducer)...");
+            // Note: infrastructure_reducer handles LoadEnvFile, InitializeOctocrab, LoadRepositories
+            // repos_reducer just acknowledges bootstrap started
         }
 
-        // Internal state update actions
-        Action::SetBootstrapState(new_state) => {
-            state.bootstrap_state = new_state.clone();
+        // Internal state update actions (bootstrap_state moved to infrastructure_reducer)
+        Action::SetBootstrapState(_) => {
+            // Handled by infrastructure_reducer
         }
         Action::SetLoadingState(new_state) => {
             state.loading_state = new_state.clone();
@@ -425,7 +467,7 @@ fn repos_reducer(
             );
             state.recent_repos = result.repos.clone();
             state.selected_repo = result.selected_repo;
-            state.bootstrap_state = BootstrapState::LoadingFirstRepo;
+            effects.push(Effect::DispatchAction(Action::SetBootstrapState(BootstrapState::LoadingFirstRepo)));
 
             // Load selected repo first for quick UI display
             if let Some(selected_repo) = result.repos.get(result.selected_repo) {
@@ -453,7 +495,7 @@ fn repos_reducer(
                 ))));
             } else {
                 // Fallback: load all repos if selected repo doesn't exist
-                state.bootstrap_state = BootstrapState::LoadingRemainingRepos;
+                effects.push(Effect::DispatchAction(Action::SetBootstrapState(BootstrapState::LoadingRemainingRepos)));
                 for i in 0..result.repos.len() {
                     let data = state.repo_data.entry(i).or_default();
                     data.loading_state = LoadingState::Loading;
@@ -474,7 +516,7 @@ fn repos_reducer(
             }
         }
         Action::BootstrapComplete(Err(err)) => {
-            state.bootstrap_state = BootstrapState::Error(err.clone());
+            effects.push(Effect::DispatchAction(Action::SetBootstrapState(BootstrapState::Error(err.clone()))));
         }
         Action::RepoLoadingStarted(repo_index) => {
             // Mark repo as loading (request in flight)
@@ -614,11 +656,11 @@ fn repos_reducer(
             }
 
             // Quick load: Check if this is the first repo loaded (selected repo)
-            if state.bootstrap_state == BootstrapState::LoadingFirstRepo
+            if infrastructure.bootstrap_state == BootstrapState::LoadingFirstRepo
                 && *repo_index == state.selected_repo
             {
                 // First repo loaded - UI is ready to display!
-                state.bootstrap_state = BootstrapState::UIReady;
+                effects.push(Effect::DispatchAction(Action::SetBootstrapState(BootstrapState::UIReady)));
 
                 // Show success message for first repo
                 if let Some(repo) = state.recent_repos.get(*repo_index) {
@@ -642,7 +684,7 @@ fn repos_reducer(
                         "Starting background loading of {} remaining repositories",
                         state.recent_repos.len() - 1
                     );
-                    state.bootstrap_state = BootstrapState::LoadingRemainingRepos;
+                    effects.push(Effect::DispatchAction(Action::SetBootstrapState(BootstrapState::LoadingRemainingRepos)));
 
                     // Mark all other repos as loading
                     for i in 0..state.recent_repos.len() {
@@ -668,9 +710,9 @@ fn repos_reducer(
                     });
                 } else {
                     // Only one repo - we're done
-                    state.bootstrap_state = BootstrapState::Completed;
+                    effects.push(Effect::DispatchAction(Action::SetBootstrapState(BootstrapState::Completed)));
                 }
-            } else if state.bootstrap_state == BootstrapState::LoadingRemainingRepos {
+            } else if infrastructure.bootstrap_state == BootstrapState::LoadingRemainingRepos {
                 // Show status message for each repo that loads in background
                 if let Some(repo) = state.recent_repos.get(*repo_index) {
                     info!(
@@ -698,7 +740,7 @@ fn repos_reducer(
                 });
 
             // Effect: Dispatch bootstrap completion
-            if all_loaded && state.bootstrap_state == BootstrapState::LoadingRemainingRepos {
+            if all_loaded && infrastructure.bootstrap_state == BootstrapState::LoadingRemainingRepos {
                 let loaded_count = state
                     .repo_data
                     .values()
@@ -731,11 +773,11 @@ fn repos_reducer(
             data.loading_state = LoadingState::Error(err.clone());
 
             // Quick load: Check if this is the first repo that failed
-            if state.bootstrap_state == BootstrapState::LoadingFirstRepo
+            if infrastructure.bootstrap_state == BootstrapState::LoadingFirstRepo
                 && *repo_index == state.selected_repo
             {
                 // First repo failed - still show UI but with error message
-                state.bootstrap_state = BootstrapState::UIReady;
+                effects.push(Effect::DispatchAction(Action::SetBootstrapState(BootstrapState::UIReady)));
 
                 // Show error message for first repo
                 if let Some(repo) = state.recent_repos.get(*repo_index) {
@@ -753,7 +795,7 @@ fn repos_reducer(
 
                 // Start loading remaining repos in background (if any)
                 if state.recent_repos.len() > 1 {
-                    state.bootstrap_state = BootstrapState::LoadingRemainingRepos;
+                    effects.push(Effect::DispatchAction(Action::SetBootstrapState(BootstrapState::LoadingRemainingRepos)));
 
                     // Mark all other repos as loading
                     for i in 0..state.recent_repos.len() {
@@ -779,9 +821,9 @@ fn repos_reducer(
                     });
                 } else {
                     // Only one repo and it failed - still complete bootstrap to show UI
-                    state.bootstrap_state = BootstrapState::Completed;
+                    effects.push(Effect::DispatchAction(Action::SetBootstrapState(BootstrapState::Completed)));
                 }
-            } else if state.bootstrap_state == BootstrapState::LoadingRemainingRepos {
+            } else if infrastructure.bootstrap_state == BootstrapState::LoadingRemainingRepos {
                 // Show error message for background repo that failed
                 if let Some(repo) = state.recent_repos.get(*repo_index) {
                     error!(
@@ -807,7 +849,7 @@ fn repos_reducer(
                 });
 
             // Effect: Dispatch bootstrap completion if all done
-            if all_loaded && state.bootstrap_state == BootstrapState::LoadingRemainingRepos {
+            if all_loaded && infrastructure.bootstrap_state == BootstrapState::LoadingRemainingRepos {
                 let loaded_count = state
                     .repo_data
                     .values()
