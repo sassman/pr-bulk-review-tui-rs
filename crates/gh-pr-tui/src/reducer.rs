@@ -12,7 +12,7 @@ pub fn reduce(mut state: AppState, action: &Action) -> (AppState, Vec<Effect>) {
     state.infrastructure = infrastructure_state;
     effects.extend(infrastructure_effects);
 
-    let (ui_state, ui_effects) = ui_reducer(state.ui, action);
+    let (ui_state, ui_effects) = ui_reducer(state.ui, action, &state.theme);
     state.ui = ui_state;
     effects.extend(ui_effects);
 
@@ -48,7 +48,11 @@ pub fn reduce(mut state: AppState, action: &Action) -> (AppState, Vec<Effect>) {
 }
 
 /// UI state reducer - handles UI-related actions
-fn ui_reducer(mut state: UiState, action: &Action) -> (UiState, Vec<Effect>) {
+fn ui_reducer(
+    mut state: UiState,
+    action: &Action,
+    theme: &crate::theme::Theme,
+) -> (UiState, Vec<Effect>) {
     match action {
         Action::Quit => {
             state.should_quit = true;
@@ -212,6 +216,8 @@ fn ui_reducer(mut state: UiState, action: &Action) -> (UiState, Vec<Effect>) {
             {
                 palette.selected_index =
                     (palette.selected_index + 1) % palette.filtered_commands.len();
+                // Recompute view model
+                recompute_command_palette_view_model(&mut state, theme);
             }
         }
         Action::CommandPaletteSelectPrev => {
@@ -222,6 +228,8 @@ fn ui_reducer(mut state: UiState, action: &Action) -> (UiState, Vec<Effect>) {
                     .selected_index
                     .checked_sub(1)
                     .unwrap_or(palette.filtered_commands.len() - 1);
+                // Recompute view model
+                recompute_command_palette_view_model(&mut state, theme);
             }
         }
         Action::CommandPaletteExecute => {
@@ -245,12 +253,36 @@ fn ui_reducer(mut state: UiState, action: &Action) -> (UiState, Vec<Effect>) {
                 } else {
                     palette.selected_index = 0;
                 }
+                // Recompute view model
+                recompute_command_palette_view_model(&mut state, theme);
             }
         }
         _ => {}
     }
 
     (state, vec![])
+}
+
+/// Recompute command palette view model after state changes
+fn recompute_command_palette_view_model(state: &mut UiState, theme: &crate::theme::Theme) {
+    if let Some(ref mut palette) = state.command_palette {
+        // Use reasonable defaults for terminal dimensions
+        // Typical terminal: 80x24, popup is 70% width x 60% height
+        // After margins/borders: ~50 columns x 10 rows for content
+        const VISIBLE_HEIGHT: usize = 10;
+        const AVAILABLE_WIDTH: usize = 50;
+
+        palette.view_model = Some(
+            crate::view_models::command_palette::CommandPaletteViewModel::from_state(
+                &palette.input,
+                palette.selected_index,
+                &palette.filtered_commands,
+                VISIBLE_HEIGHT,
+                AVAILABLE_WIDTH,
+                theme,
+            ),
+        );
+    }
 }
 
 /// Parse GitHub URL into (org, repo, branch)

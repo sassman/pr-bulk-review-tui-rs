@@ -7,12 +7,18 @@ use ratatui::{
 use crate::App;
 
 /// Render the command palette popup
+/// Pure presentation - uses pre-computed view model
 pub fn render_command_palette(f: &mut Frame, area: Rect, app: &App) {
     use ratatui::widgets::{Clear, Wrap};
 
     let palette = match &app.store.state().ui.command_palette {
         Some(p) => p,
         None => return,
+    };
+
+    // Get view model - if not ready yet, return early
+    let Some(ref vm) = palette.view_model else {
+        return;
     };
 
     let theme = &app.store.state().theme;
@@ -37,11 +43,8 @@ pub fn render_command_palette(f: &mut Frame, area: Rect, app: &App) {
         popup_area,
     );
 
-    // Render border and title
-    let title = format!(
-        " Command Palette ({} commands) ",
-        palette.filtered_commands.len()
-    );
+    // Render border and title (using pre-computed total)
+    let title = format!(" Command Palette ({} commands) ", vm.total_commands);
     let block = Block::default()
         .borders(Borders::ALL)
         .title(title)
@@ -76,9 +79,8 @@ pub fn render_command_palette(f: &mut Frame, area: Rect, app: &App) {
         ])
         .split(inner);
 
-    // Render input box
-    let input_text = format!("> {}", palette.input);
-    let input_paragraph = Paragraph::new(input_text)
+    // Render input box (pre-formatted in view model)
+    let input_paragraph = Paragraph::new(vm.input_text.clone())
         .block(
             Block::default()
                 .borders(Borders::ALL)
@@ -93,115 +95,62 @@ pub fn render_command_palette(f: &mut Frame, area: Rect, app: &App) {
     f.render_widget(input_paragraph, chunks[0]);
 
     // Render results list
-    if palette.filtered_commands.is_empty() {
+    if vm.visible_rows.is_empty() {
         // No results
         let no_results = Paragraph::new("No matching commands")
             .style(Style::default().fg(theme.text_muted))
             .alignment(ratatui::layout::Alignment::Center);
         f.render_widget(no_results, chunks[1]);
     } else {
-        // Calculate visible range
-        let visible_height = chunks[1].height as usize;
-        let total_items = palette.filtered_commands.len();
-        let selected = palette.selected_index;
-
-        // Ensure selected item is visible (scroll if needed)
-        let scroll_offset = if selected < visible_height / 2 {
-            0
-        } else if selected >= total_items.saturating_sub(visible_height / 2) {
-            total_items.saturating_sub(visible_height)
-        } else {
-            selected.saturating_sub(visible_height / 2)
-        };
-
-        // Build result lines
-        let available_width = chunks[1].width as usize;
-
-        let result_lines: Vec<Line> = palette
-            .filtered_commands
+        // Build result lines - simple iteration over pre-computed view models!
+        let result_lines: Vec<Line> = vm
+            .visible_rows
             .iter()
-            .enumerate()
-            .skip(scroll_offset)
-            .take(visible_height)
-            .map(|(i, (cmd, _score))| {
-                let is_selected = i == selected;
-
+            .map(|row_vm| {
                 let mut spans = Vec::new();
 
-                // Selection indicator (2 chars)
-                if is_selected {
-                    spans.push(Span::styled(
-                        "> ",
-                        Style::default()
-                            .fg(theme.accent_primary)
-                            .add_modifier(Modifier::BOLD),
-                    ));
-                } else {
-                    spans.push(Span::raw("  "));
-                }
-
-                // Shortcut hint (13 chars: 12 for hint + 1 space)
-                if let Some(ref hint) = cmd.shortcut_hint {
-                    let hint_text = format!("{:12} ", hint);
-                    spans.push(Span::styled(
-                        hint_text,
-                        Style::default().fg(if is_selected {
-                            theme.accent_primary
-                        } else {
-                            theme.text_muted
-                        }),
-                    ));
-                } else {
-                    spans.push(Span::raw("             "));
-                }
-
-                // Calculate available width for title
-                // Total width - indicator(2) - shortcut(13) - category(len+2 for brackets) - padding(3)
-                let category_text = format!("[{}]", cmd.category);
-                let fixed_width = 2 + 13 + category_text.len() + 3;
-                let max_title_width = available_width.saturating_sub(fixed_width);
-
-                // Truncate title if needed
-                let title_text = if cmd.title.len() > max_title_width && max_title_width > 3 {
-                    format!("{}...", &cmd.title[..max_title_width.saturating_sub(3)])
-                } else {
-                    cmd.title.clone()
-                };
-
+                // All text is pre-formatted in view model!
                 spans.push(Span::styled(
-                    title_text.clone(),
+                    row_vm.indicator.clone(),
                     Style::default()
-                        .fg(if is_selected {
-                            theme.selected_fg
+                        .fg(if row_vm.is_selected {
+                            theme.accent_primary
                         } else {
                             theme.text_primary
                         })
-                        .bg(if is_selected {
-                            theme.selected_bg
-                        } else {
-                            Color::Reset
-                        })
-                        .add_modifier(if is_selected {
+                        .add_modifier(if row_vm.is_selected {
                             Modifier::BOLD
                         } else {
                             Modifier::empty()
                         }),
                 ));
 
-                // Calculate padding to right-align category
-                let used_width = 2 + 13 + title_text.len() + category_text.len();
-                let padding = if available_width > used_width {
-                    available_width.saturating_sub(used_width)
-                } else {
-                    1
-                };
-
-                spans.push(Span::raw(" ".repeat(padding)));
-
-                // Category (right-aligned)
                 spans.push(Span::styled(
-                    category_text,
-                    Style::default().fg(if is_selected {
+                    row_vm.shortcut_hint.clone(),
+                    Style::default().fg(if row_vm.is_selected {
+                        theme.accent_primary
+                    } else {
+                        theme.text_muted
+                    }),
+                ));
+
+                spans.push(Span::styled(
+                    row_vm.title.clone(),
+                    Style::default()
+                        .fg(row_vm.fg_color)
+                        .bg(row_vm.bg_color)
+                        .add_modifier(if row_vm.is_selected {
+                            Modifier::BOLD
+                        } else {
+                            Modifier::empty()
+                        }),
+                ));
+
+                spans.push(Span::raw(row_vm.padding.clone()));
+
+                spans.push(Span::styled(
+                    row_vm.category.clone(),
+                    Style::default().fg(if row_vm.is_selected {
                         theme.text_secondary
                     } else {
                         theme.text_muted
@@ -218,17 +167,15 @@ pub fn render_command_palette(f: &mut Frame, area: Rect, app: &App) {
         f.render_widget(results_paragraph, chunks[1]);
     }
 
-    // Render details area with selected command info
-    if let Some((selected_cmd, _)) = palette.filtered_commands.get(palette.selected_index) {
+    // Render details area with selected command info (pre-computed in view model)
+    if let Some(ref selected_cmd) = vm.selected_command {
         let mut details_text = vec![];
 
-        // Show description
         details_text.push(Span::styled(
             selected_cmd.description.clone(),
             Style::default().fg(theme.text_secondary),
         ));
 
-        // Show context if present
         if let Some(ref context) = selected_cmd.context {
             details_text.push(Span::styled(
                 format!("  ({})", context),

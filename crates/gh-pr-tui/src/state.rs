@@ -108,6 +108,8 @@ pub struct CommandPaletteState {
     pub selected_index: usize,
     /// Filtered and scored commands (command, score)
     pub filtered_commands: Vec<(CommandItem<crate::actions::Action>, u16)>,
+    /// View model - pre-computed presentation data
+    pub view_model: Option<crate::view_models::command_palette::CommandPaletteViewModel>,
 }
 
 impl Default for CommandPaletteState {
@@ -122,6 +124,7 @@ impl CommandPaletteState {
             input: String::new(),
             selected_index: 0,
             filtered_commands: Vec::new(),
+            view_model: None,
         }
     }
 }
