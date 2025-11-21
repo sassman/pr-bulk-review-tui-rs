@@ -10,7 +10,7 @@ use crate::{
     load_persisted_state, loading_recent_repos,
     log::PrContext,
     pr::Pr,
-    state::{LoadingState, Repo, TaskStatus, TaskStatusType},
+    state::{Repo, TaskStatus, TaskStatusType},
     task::BackgroundTask,
 };
 use anyhow::Result;
@@ -541,14 +541,15 @@ pub async fn execute_effect(app: &mut App, effect: Effect) -> Result<Vec<Action>
         }
 
         Effect::StartMergeBot { prs, .. } => {
-            // Start merge bot - update state directly
+            // Start merge bot - dispatch action to reducer
             let pr_data: Vec<(usize, usize)> = prs
                 .iter()
                 .enumerate()
                 .map(|(idx, pr)| (pr.number, idx))
                 .collect();
 
-            app.store.state_mut().merge_bot.bot.start(pr_data);
+            // Dispatch action to initialize bot (reducer handles state mutation)
+            follow_up_actions.push(Action::StartMergeBotWithPrData(pr_data));
             follow_up_actions.push(Action::SetTaskStatus(Some(TaskStatus {
                 message: format!("Merge bot started with {} PR(s)", prs.len()),
                 status_type: TaskStatusType::Success,
@@ -644,12 +645,14 @@ pub async fn execute_effect(app: &mut App, effect: Effect) -> Result<Vec<Action>
                 .any(|r| r.org == repo.org && r.repo == repo.repo && r.branch == repo.branch);
 
             if !repo_exists {
-                // Add to repos list in state
+                // Calculate new repo index
+                let repo_index = app.store.state().repos.recent_repos.len();
+
+                // Build new repos list for saving
                 let mut new_repos = app.store.state().repos.recent_repos.clone();
                 new_repos.push(repo.clone());
-                let repo_index = new_repos.len() - 1;
 
-                // Save to file
+                // Save to file first (effect side effect)
                 if let Err(e) = crate::store_recent_repos(&new_repos) {
                     follow_up_actions.push(Action::SetTaskStatus(Some(TaskStatus {
                         message: format!("Failed to save repository: {}", e),
@@ -658,18 +661,11 @@ pub async fn execute_effect(app: &mut App, effect: Effect) -> Result<Vec<Action>
                     return Ok(follow_up_actions);
                 }
 
-                // Update state by mutating the store directly
-                app.store.state_mut().repos.recent_repos = new_repos;
-
-                // Initialize repo data for the new repo
-                let data = app
-                    .store
-                    .state_mut()
-                    .repos
-                    .repo_data
-                    .entry(repo_index)
-                    .or_default();
-                data.loading_state = LoadingState::Loading;
+                // Dispatch action to update state (reducer handles mutation)
+                follow_up_actions.push(Action::RepositoryAdded {
+                    repo_index,
+                    repo: repo.clone(),
+                });
 
                 // Show success message
                 follow_up_actions.push(Action::SetTaskStatus(Some(TaskStatus {

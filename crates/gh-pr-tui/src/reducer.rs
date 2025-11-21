@@ -540,6 +540,19 @@ fn repos_reducer(
                 ))));
             }
         }
+        Action::RepositoryAdded { repo_index, repo } => {
+            // Add repository to state (dispatched from effect after file save)
+            state.recent_repos.push(repo.clone());
+
+            // Initialize repo data
+            let data = state.repo_data.entry(*repo_index).or_default();
+            data.loading_state = LoadingState::Loading;
+
+            // Recompute view model if this becomes the selected repo
+            if *repo_index == state.selected_repo {
+                recompute_pr_table_view_model(&mut state, theme);
+            }
+        }
         Action::SelectRepoByIndex(index) => {
             if *index < state.recent_repos.len() {
                 state.selected_repo = *index;
@@ -1757,6 +1770,10 @@ fn merge_bot_reducer(mut state: MergeBotState, action: &Action) -> (MergeBotStat
         Action::StartMergeBot => {
             // Note: actual bot starting logic with PR data happens in the effect handler
             // This just ensures the state is ready
+        }
+        Action::StartMergeBotWithPrData(pr_data) => {
+            // Initialize merge bot with PR data (reducer responsibility)
+            state.bot.start(pr_data.clone());
         }
         Action::MergeStatusUpdated(_repo_index, pr_number, status) => {
             if state.bot.is_running() {

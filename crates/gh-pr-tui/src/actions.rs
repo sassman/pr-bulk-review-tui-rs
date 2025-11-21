@@ -23,7 +23,8 @@ pub enum Action {
     MergeSelectedPrs,
     ApprovePrs,
     StartMergeBot,
-    MergeBotTick, // Internal action for merge bot processing
+    StartMergeBotWithPrData(Vec<(usize, usize)>), // [(pr_number, index)] - reducer will initialize bot
+    MergeBotTick,                                 // Internal action for merge bot processing
     OpenCurrentPrInBrowser,
     OpenBuildLogs,
     OpenInIDE,
@@ -69,6 +70,10 @@ pub enum Action {
 
     // Repository management
     DeleteCurrentRepo,
+    RepositoryAdded {
+        repo_index: usize,
+        repo: crate::Repo,
+    }, // Dispatched after repo successfully saved to file
 
     // State update actions (dispatched internally)
     SetBootstrapState(crate::state::BootstrapState),
