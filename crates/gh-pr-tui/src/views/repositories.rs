@@ -5,55 +5,35 @@ use ratatui::{
 };
 
 use crate::App;
-use crate::state::{AddRepoField, AddRepoForm, LoadingState};
+use crate::state::{AddRepoField, AddRepoForm};
 use crate::theme::Theme;
 
 /// Render the repository tabs showing all tracked repositories
+/// Pure presentation - uses pre-computed view model
 pub fn render_repository_tabs(f: &mut Frame, area: Rect, app: &App) {
-    // Render tabs (always visible when there are repos)
-    let tab_titles: Vec<Line> = app
-        .store
-        .state()
-        .repos
-        .recent_repos
+    let repos_state = &app.store.state().repos;
+
+    // Get view model - if not ready yet, skip rendering
+    let Some(ref vm) = repos_state.repository_tabs_view_model else {
+        return;
+    };
+
+    // Build tab titles from view model - simple iteration!
+    let tab_titles: Vec<Line> = vm
+        .tabs
         .iter()
-        .enumerate()
-        .map(|(i, repo)| {
-            // Check if this repo is currently loading
-            let is_loading = app
-                .store
-                .state()
-                .repos
-                .repo_data
-                .get(&i)
-                .map(|data| matches!(data.loading_state, LoadingState::Loading))
-                .unwrap_or(false);
-
-            let number = if i < 9 {
-                format!("{} ", i + 1)
-            } else {
-                String::new()
-            };
-
-            // Add sandglass before number if loading
-            let prefix = if is_loading { "⏳ " } else { "" };
-
-            Line::from(format!("{}{}{}/{}", prefix, number, repo.org, repo.repo))
-        })
+        .map(|tab| Line::from(tab.display_text.clone()))
         .collect();
 
     let tabs = Tabs::new(tab_titles)
-        .block(Block::default().borders(Borders::ALL).title(format!(
-            "Projects [Tab/1-9: switch, /: cycle] | Filter: {} [f: cycle]",
-            app.store.state().repos.filter.label()
-        )))
-        .select(app.store.state().repos.selected_repo)
-        .style(Style::default().fg(app.store.state().repos.colors.row_fg))
+        .block(Block::default().borders(Borders::ALL).title(vm.title.clone()))
+        .select(vm.selected_index)
+        .style(Style::default().fg(repos_state.colors.row_fg))
         .highlight_style(
             Style::default()
-                .fg(app.store.state().repos.colors.selected_row_style_fg)
+                .fg(repos_state.colors.selected_row_style_fg)
                 .add_modifier(Modifier::BOLD)
-                .bg(app.store.state().repos.colors.header_bg),
+                .bg(repos_state.colors.header_bg),
         );
 
     f.render_widget(tabs, area);

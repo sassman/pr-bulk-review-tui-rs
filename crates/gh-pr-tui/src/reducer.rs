@@ -719,6 +719,7 @@ fn repos_reducer(
             // Recompute view model after PR data loaded
             if *repo_index == state.selected_repo {
                 recompute_pr_table_view_model(&mut state, theme);
+            recompute_repository_tabs_view_model(&mut state);
             }
         }
         Action::RepoDataLoaded(repo_index, Err(err)) => {
@@ -1395,6 +1396,7 @@ fn repos_reducer(
 
                 // Recompute view model for new repo
                 recompute_pr_table_view_model(&mut state, theme);
+            recompute_repository_tabs_view_model(&mut state);
             }
         }
         Action::SelectPreviousRepo => {
@@ -1414,6 +1416,7 @@ fn repos_reducer(
 
                 // Recompute view model for new repo
                 recompute_pr_table_view_model(&mut state, theme);
+            recompute_repository_tabs_view_model(&mut state);
             }
         }
         Action::StartOperationMonitor(repo_index, pr_number, operation) => {
@@ -1764,6 +1767,18 @@ fn recompute_pr_table_view_model(state: &mut ReposState, theme: &crate::theme::T
             ),
         );
     }
+}
+
+/// Recompute repository tabs view model after state changes
+fn recompute_repository_tabs_view_model(state: &mut ReposState) {
+    state.repository_tabs_view_model = Some(
+        crate::view_models::repository_tabs::RepositoryTabsViewModel::from_state(
+            &state.recent_repos,
+            &state.repo_data,
+            state.selected_repo,
+            state.filter.label(),
+        ),
+    );
 }
 
 /// Merge bot state reducer

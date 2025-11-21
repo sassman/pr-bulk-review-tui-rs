@@ -141,6 +141,8 @@ pub struct ReposState {
     pub prs: Vec<Pr>,
     pub state: TableState,
     pub colors: TableColors,
+    /// View model for repository tabs
+    pub repository_tabs_view_model: Option<crate::view_models::repository_tabs::RepositoryTabsViewModel>,
 }
 
 /// Log panel state
@@ -396,6 +398,7 @@ impl Default for ReposState {
             prs: Vec::new(),
             state: TableState::default(),
             colors: TableColors::default(),
+            repository_tabs_view_model: None,
         }
     }
 }
